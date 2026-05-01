@@ -121,16 +121,16 @@ export default function Home() {
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={handlePickFile} className={btnGhost}>
-            导入 JSON
+            导入<span className="hidden sm:inline"> JSON</span>
           </button>
           <button onClick={handleExport} className={btnGhost}>
-            导出 JSON
+            导出<span className="hidden sm:inline"> JSON</span>
           </button>
           <button
             onClick={() => setDialogState({ mode: "create" })}
             className={btnPrimary}
           >
-            + 新增 SKU
+            + 新增<span className="hidden sm:inline"> SKU</span>
           </button>
           <Link
             href="/screen"

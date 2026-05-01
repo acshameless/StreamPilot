@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useHasHydrated, useSkuStore } from "@/lib/store";
 
@@ -12,6 +12,13 @@ type FsElement = HTMLElement & {
   webkitRequestFullscreen?: () => Promise<void> | void;
 };
 
+interface Gesture {
+  x: number;
+  y: number;
+  t: number;
+  id: number;
+}
+
 export default function ScreenPage() {
   const router = useRouter();
 
@@ -21,8 +28,8 @@ export default function ScreenPage() {
   const hasHydrated = useHasHydrated();
 
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const gestureRef = useRef<Gesture | null>(null);
 
-  // Derive safe index from store — single source of truth, no oscillation.
   const index = Math.min(
     Math.max(0, lastIndex),
     Math.max(0, skus.length - 1),
@@ -96,19 +103,50 @@ export default function ScreenPage() {
     };
   }, []);
 
-  const handleClick = (e: React.MouseEvent<HTMLElement>) => {
-    const target = e.target as HTMLElement;
-    if (target.closest("[data-no-tap]")) return;
-    if (e.clientX < window.innerWidth / 2) {
-      goPrev();
-    } else {
-      goNext();
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    gestureRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      t: Date.now(),
+      id: e.pointerId,
+    };
+  };
+
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const start = gestureRef.current;
+    gestureRef.current = null;
+    if (!start || start.id !== e.pointerId) return;
+
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    const dist = Math.hypot(dx, dy);
+    const dt = Date.now() - start.t;
+
+    // Horizontal swipe: > 50px, mostly horizontal, faster than 700ms.
+    if (
+      Math.abs(dx) > 50 &&
+      Math.abs(dx) > Math.abs(dy) * 1.4 &&
+      dt < 700
+    ) {
+      if (dx < 0) goNext();
+      else goPrev();
+      return;
     }
+
+    // Tap (barely moved): split-screen prev / next.
+    if (dist < 12) {
+      if (e.clientX < window.innerWidth / 2) goPrev();
+      else goNext();
+    }
+  };
+
+  const onPointerCancel = () => {
+    gestureRef.current = null;
   };
 
   if (!hasHydrated) {
     return (
-      <main className="flex h-screen items-center justify-center bg-slate-900 text-slate-400">
+      <main className="flex h-dvh items-center justify-center bg-slate-900 text-slate-400">
         加载中...
       </main>
     );
@@ -116,7 +154,7 @@ export default function ScreenPage() {
 
   if (skus.length === 0) {
     return (
-      <main className="flex h-screen flex-col items-center justify-center gap-4 bg-slate-900 text-slate-100">
+      <main className="flex h-dvh flex-col items-center justify-center gap-4 bg-slate-900 text-slate-100">
         <p className="text-2xl">请先在主页添加 SKU</p>
         <button
           onClick={() => router.push("/")}
@@ -131,37 +169,23 @@ export default function ScreenPage() {
   const sku = skus[index];
 
   return (
-    <main
-      onClick={handleClick}
-      className="flex h-screen w-screen cursor-pointer flex-col bg-slate-900 text-slate-50 select-none"
-    >
-      <header
-        className="flex items-center justify-between px-8 py-4"
-        data-no-tap
-      >
-        <div className="flex items-center gap-4">
+    <main className="flex h-dvh w-screen flex-col bg-slate-900 text-slate-50 select-none">
+      <header className="flex flex-shrink-0 items-center justify-between px-4 py-2 sm:px-8 sm:py-4">
+        <div className="flex items-center gap-3 sm:gap-4">
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              router.push("/");
-            }}
-            data-no-tap
+            onClick={() => router.push("/")}
             className="text-2xl text-slate-400 transition hover:text-slate-100"
             aria-label="返回主页"
           >
             ←
           </button>
-          <span className="text-xl tabular-nums text-slate-400">
+          <span className="text-base tabular-nums text-slate-400 sm:text-xl">
             {index + 1} / {skus.length}
           </span>
         </div>
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleFullscreen();
-          }}
-          data-no-tap
-          className="rounded-lg border border-slate-700 px-3 py-1 text-base text-slate-300 transition hover:bg-slate-800 hover:text-white"
+          onClick={toggleFullscreen}
+          className="rounded-lg border border-slate-700 px-3 py-1 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white sm:text-base"
         >
           {isFullscreen ? "退出全屏" : "全屏"}
         </button>
@@ -169,30 +193,35 @@ export default function ScreenPage() {
 
       <div
         key={sku.id}
-        className="animate-screen-in flex-1 overflow-y-auto px-12 pb-8"
+        onPointerDown={onPointerDown}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
+        className="animate-screen-in flex flex-1 cursor-pointer touch-none flex-col gap-3 overflow-hidden px-5 pb-3 sm:gap-6 sm:px-12 sm:pb-6"
       >
-        <div className="mb-10 flex flex-wrap items-baseline gap-x-10 gap-y-2 border-b border-slate-700 pb-6">
-          <h1 className="text-7xl font-bold tracking-wide">{sku.name}</h1>
-          <span className="text-7xl font-semibold text-yellow-300">
+        <div className="flex flex-shrink-0 flex-wrap items-baseline gap-x-6 gap-y-1 border-b border-slate-700 pb-3 sm:gap-x-10 sm:pb-5">
+          <h1 className="text-[clamp(1.75rem,7vmin,5.5rem)] font-bold tracking-wide">
+            {sku.name}
+          </h1>
+          <span className="text-[clamp(1.75rem,7vmin,5.5rem)] font-semibold text-yellow-300">
             ¥ {sku.price}
           </span>
         </div>
 
         {sku.material && (
           <Section title="材质">
-            <p className="text-5xl leading-relaxed text-slate-100">
+            <p className="text-[clamp(1.05rem,3.2vmin,2.75rem)] leading-snug text-slate-100">
               {sku.material}
             </p>
           </Section>
         )}
 
         {sku.sellingPoints.length > 0 && (
-          <Section title="卖点">
-            <ul className="space-y-3">
+          <Section title="卖点" className="min-h-0 flex-1 overflow-hidden">
+            <ul className="space-y-1 sm:space-y-2">
               {sku.sellingPoints.map((pt, i) => (
                 <li
                   key={i}
-                  className="text-5xl leading-relaxed text-slate-100"
+                  className="text-[clamp(1.05rem,3.2vmin,2.75rem)] leading-snug text-slate-100"
                 >
                   <span className="text-emerald-400">•</span> {pt}
                 </li>
@@ -203,19 +232,16 @@ export default function ScreenPage() {
 
         {sku.bannedWords.length > 0 && (
           <Section title="⚠ 禁说">
-            <p className="text-5xl font-bold leading-relaxed text-red-400">
+            <p className="text-[clamp(1.15rem,3.6vmin,3.25rem)] font-bold leading-snug text-red-400">
               {sku.bannedWords.join("   /   ")}
             </p>
           </Section>
         )}
       </div>
 
-      <footer
-        className="flex items-center justify-between px-8 py-4 text-base text-slate-500"
-        data-no-tap
-      >
+      <footer className="hidden flex-shrink-0 items-center justify-between px-8 py-3 text-sm text-slate-500 sm:flex">
         <span>← 上一个</span>
-        <span>空格 / 点击 切换 · ESC 退出 · F 全屏</span>
+        <span>空格 / 点击 / 滑动 切换 · ESC 退出 · F 全屏</span>
         <span>下一个 →</span>
       </footer>
     </main>
@@ -225,13 +251,17 @@ export default function ScreenPage() {
 function Section({
   title,
   children,
+  className = "",
 }: {
   title: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="mb-10">
-      <h3 className="mb-3 text-2xl text-slate-400">{title}</h3>
+    <section className={`flex flex-col gap-1 sm:gap-2 ${className}`}>
+      <h3 className="text-[clamp(0.7rem,1.4vmin,1.25rem)] uppercase tracking-wider text-slate-400">
+        {title}
+      </h3>
       {children}
     </section>
   );
