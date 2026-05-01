@@ -12,7 +12,7 @@ interface Props {
 }
 
 const inputClass =
-  "w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-950";
+  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100";
 
 export default function SkuFormDialog({ mode, sku, onClose }: Props) {
   const addSku = useSkuStore((s) => s.addSku);
@@ -52,27 +52,27 @@ export default function SkuFormDialog({ mode, sku, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl dark:bg-zinc-900">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-900">
             {mode === "create" ? "新增 SKU" : "编辑 SKU"}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="关闭"
-            className="text-xl text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
+            className="rounded-md p-1 text-xl leading-none text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
           >
             ✕
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3 text-sm">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm">
           <Field label="商品名称" required>
             <input
               type="text"
@@ -105,7 +105,7 @@ export default function SkuFormDialog({ mode, sku, onClose }: Props) {
             />
           </Field>
 
-          <Field label="卖点（每行一条）">
+          <Field label="卖点" hint="每行一条">
             <textarea
               value={sellingPointsText}
               onChange={(e) => setSellingPointsText(e.target.value)}
@@ -115,7 +115,7 @@ export default function SkuFormDialog({ mode, sku, onClose }: Props) {
             />
           </Field>
 
-          <Field label="禁说词（每行一条）">
+          <Field label="禁说词" hint="每行一条">
             <textarea
               value={bannedWordsText}
               onChange={(e) => setBannedWordsText(e.target.value)}
@@ -129,13 +129,13 @@ export default function SkuFormDialog({ mode, sku, onClose }: Props) {
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-zinc-300 px-4 py-2 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 font-medium text-slate-700 transition hover:bg-slate-50"
             >
               取消
             </button>
             <button
               type="submit"
-              className="rounded-md bg-zinc-900 px-4 py-2 font-medium text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+              className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white shadow-sm transition hover:bg-blue-700"
             >
               {mode === "create" ? "新增" : "保存"}
             </button>
@@ -148,18 +148,23 @@ export default function SkuFormDialog({ mode, sku, onClose }: Props) {
 
 function Field({
   label,
+  hint,
   required,
   children,
 }: {
   label: string;
+  hint?: string;
   required?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="font-medium">
+    <label className="flex flex-col gap-1.5">
+      <span className="flex items-baseline gap-2 font-medium text-slate-700">
         {label}
-        {required && <span className="text-rose-600"> *</span>}
+        {required && <span className="text-rose-600">*</span>}
+        {hint && (
+          <span className="text-xs font-normal text-slate-400">{hint}</span>
+        )}
       </span>
       {children}
     </label>

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { SKU, SkuInput } from "@/types/sku";
@@ -5,7 +6,6 @@ import type { SKU, SkuInput } from "@/types/sku";
 interface State {
   skus: SKU[];
   lastIndex: number;
-  hasHydrated: boolean;
 }
 
 interface Actions {
@@ -13,7 +13,14 @@ interface Actions {
   updateSku: (id: string, input: SkuInput) => void;
   deleteSku: (id: string) => void;
   setLastIndex: (i: number) => void;
-  setHasHydrated: (b: boolean) => void;
+  replaceSkus: (skus: SKU[]) => void;
+}
+
+function newId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
 export const useSkuStore = create<State & Actions>()(
@@ -21,12 +28,8 @@ export const useSkuStore = create<State & Actions>()(
     (set) => ({
       skus: [],
       lastIndex: 0,
-      hasHydrated: false,
       addSku: (input) => {
-        const id =
-          typeof crypto !== "undefined" && "randomUUID" in crypto
-            ? crypto.randomUUID()
-            : Math.random().toString(36).slice(2);
+        const id = newId();
         set((s) => ({
           skus: [
             ...s.skus,
@@ -55,15 +58,30 @@ export const useSkuStore = create<State & Actions>()(
           };
         }),
       setLastIndex: (i) => set({ lastIndex: i }),
-      setHasHydrated: (b) => set({ hasHydrated: b }),
+      replaceSkus: (skus) => set({ skus, lastIndex: 0 }),
     }),
     {
       name: "zhibo:state:v1",
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({ skus: s.skus, lastIndex: s.lastIndex }),
-      onRehydrateStorage: () => (state) => {
-        state?.setHasHydrated(true);
-      },
     },
   ),
 );
+
+export function useHasHydrated(): boolean {
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    const unsub = useSkuStore.persist.onFinishHydration(() => {
+      setHydrated(true);
+    });
+    if (useSkuStore.persist.hasHydrated()) {
+      setHydrated(true);
+    }
+    return () => {
+      unsub();
+    };
+  }, []);
+
+  return hydrated;
+}
