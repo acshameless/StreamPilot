@@ -84,7 +84,7 @@ export function buildOptimizePrompt(sku: SkuInput): ChatMessage[] {
     {
       role: "system",
       content:
-        "你是一位直播带货文案专家。请根据用户提供的商品信息，优化润色后返回 JSON 格式。要求：1. 商品名称更吸引人但保持真实；2. 卖点每条 15 字以内，突出用户利益；3. 保留所有禁说词；4. 只返回 JSON，不要 markdown 代码块标记。",
+        '你是一位直播带货文案专家。请根据用户提供的商品信息，优化润色后返回 JSON 格式。要求：1. 商品名称更吸引人但保持真实；2. 卖点每条 15 字以内，突出用户利益；3. 保留所有禁说词；4. 生成一段 100 字左右的口播逐字稿，填入 script 字段；5. 只返回 JSON，不要 markdown 代码块标记。返回字段：name, price, material, sellingPoints, bannedWords, script。',
     },
     {
       role: "user",
@@ -94,6 +94,7 @@ export function buildOptimizePrompt(sku: SkuInput): ChatMessage[] {
         material: sku.material,
         sellingPoints: sku.sellingPoints,
         bannedWords: sku.bannedWords,
+        script: sku.script ?? "",
       }),
     },
   ];

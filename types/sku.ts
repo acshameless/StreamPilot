@@ -6,6 +6,7 @@ export interface SKU {
   sellingPoints: string[];
   bannedWords: string[];
   imageUrl: string;
+  script: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -13,4 +14,4 @@ export interface SKU {
 export type SkuInput = Pick<
   SKU,
   "name" | "price" | "material" | "sellingPoints" | "bannedWords"
-> & { imageUrl?: string };
+> & { imageUrl?: string; script?: string };

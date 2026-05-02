@@ -48,7 +48,7 @@ interface State {
 
 interface Actions {
   addSku: (input: SkuInput) => string;
-  updateSku: (id: string, input: SkuInput) => void;
+  updateSku: (id: string, input: Partial<SkuInput>) => void;
   deleteSku: (id: string) => void;
   setLastIndex: (i: number) => void;
   replaceSkus: (skus: SKU[]) => void;
@@ -81,6 +81,7 @@ export const useSkuStore = create<State & Actions>()(
             {
               ...input,
               imageUrl: input.imageUrl ?? "",
+              script: input.script ?? "",
               id,
               createdAt: Date.now(),
               updatedAt: Date.now(),
@@ -97,6 +98,7 @@ export const useSkuStore = create<State & Actions>()(
                   ...sku,
                   ...input,
                   imageUrl: input.imageUrl ?? sku.imageUrl,
+                  script: input.script ?? sku.script,
                   updatedAt: Date.now(),
                 }
               : sku,

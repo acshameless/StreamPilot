@@ -34,6 +34,8 @@ export default function SkuFormDialog({ mode, sku, onClose }: Props) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  const [script, setScript] = useState(sku?.script ?? "");
+
   const [optimizing, setOptimizing] = useState(false);
   const [optimizePreview, setOptimizePreview] = useState("");
   const [optimizeError, setOptimizeError] = useState<string | null>(null);
@@ -84,6 +86,7 @@ export default function SkuFormDialog({ mode, sku, onClose }: Props) {
       sellingPoints: linesToArray(sellingPointsText),
       bannedWords: linesToArray(bannedWordsText),
       imageUrl,
+      script: script.trim(),
     };
 
     if (mode === "create") {
@@ -136,6 +139,7 @@ export default function SkuFormDialog({ mode, sku, onClose }: Props) {
     if (parsed.material !== undefined) setMaterial(parsed.material);
     if (parsed.sellingPoints) setSellingPointsText(arrayToLines(parsed.sellingPoints));
     if (parsed.bannedWords) setBannedWordsText(arrayToLines(parsed.bannedWords));
+    if (parsed.script !== undefined) setScript(parsed.script);
     setOptimizePreview("");
     setOptimizeError(null);
   };
@@ -233,21 +237,32 @@ export default function SkuFormDialog({ mode, sku, onClose }: Props) {
                 </button>
               </div>
             ) : (
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500 transition hover:border-slate-400 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-200">
+              <label className="inline-flex w-fit cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500 transition hover:border-slate-400 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-200">
+                <span>{uploading ? "上传中…" : "📷 选择图片"}</span>
                 <input
                   type="file"
                   accept="image/*"
                   onChange={handleImageUpload}
                   className="hidden"
-                  disabled={uploading}
                 />
-                {uploading ? "上传中…" : "📷 选择图片"}
               </label>
             )}
             {uploadError && (
-              <p className="text-xs text-rose-600 dark:text-rose-400">{uploadError}</p>
+              <div className="rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-600 dark:bg-rose-900/20 dark:text-rose-400">
+                {uploadError}
+              </div>
             )}
           </div>
+
+          <Field label="口播稿" hint="可在大屏生成或手动编辑">
+            <textarea
+              value={script}
+              onChange={(e) => setScript(e.target.value)}
+              placeholder="输入口播逐字稿，支持多行..."
+              rows={3}
+              className={inputClass}
+            />
+          </Field>
 
           {optimizePreview && (
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">

@@ -87,6 +87,12 @@ function SkuCardBody({
         </span>{" "}
         禁说
       </p>
+      {sku.script && (
+        <p className="line-clamp-2 text-sm text-slate-500 dark:text-slate-400">
+          <span className="mr-1">🎤</span>
+          {sku.script}
+        </p>
+      )}
       <div className="mt-auto flex justify-end gap-2 pt-2">
         <button
           onPointerDown={(e) => e.stopPropagation()}
