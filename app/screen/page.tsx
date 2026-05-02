@@ -31,6 +31,122 @@ function parseMarkdown(text: string): React.ReactNode[] {
   return parts;
 }
 
+/* ── Position-aware markdown for karaoke highlighting ── */
+
+type SegType = "plain" | "bold" | "italic" | "code" | "strike";
+
+interface TextSegment {
+  type: SegType;
+  content: string;
+  rawStart: number;
+  rawEnd: number;
+  markerLen: number;
+}
+
+function parseSegments(text: string): TextSegment[] {
+  const segments: TextSegment[] = [];
+  const regex = /(\*\*|__)(.+?)\1|(\*|_)(.+?)\3|`(.+?)`|~~(.+?)~~/g;
+  let last = 0;
+  let m;
+  while ((m = regex.exec(text)) !== null) {
+    if (m.index > last) {
+      segments.push({
+        type: "plain",
+        content: text.slice(last, m.index),
+        rawStart: last,
+        rawEnd: m.index,
+        markerLen: 0,
+      });
+    }
+    const start = m.index;
+    const end = regex.lastIndex;
+    if (m[1]) {
+      segments.push({ type: "bold", content: m[2], rawStart: start, rawEnd: end, markerLen: 2 });
+    } else if (m[3]) {
+      segments.push({ type: "italic", content: m[4], rawStart: start, rawEnd: end, markerLen: 1 });
+    } else if (m[5]) {
+      segments.push({ type: "code", content: m[5], rawStart: start, rawEnd: end, markerLen: 1 });
+    } else if (m[6]) {
+      segments.push({ type: "strike", content: m[6], rawStart: start, rawEnd: end, markerLen: 2 });
+    }
+    last = regex.lastIndex;
+  }
+  if (last < text.length) {
+    segments.push({
+      type: "plain",
+      content: text.slice(last),
+      rawStart: last,
+      rawEnd: text.length,
+      markerLen: 0,
+    });
+  }
+  return segments;
+}
+
+function wrapSeg(
+  type: SegType,
+  text: string,
+  colorClass: string,
+  key: React.Key,
+): React.ReactNode {
+  switch (type) {
+    case "bold":
+      return <strong key={key} className={colorClass}>{text}</strong>;
+    case "italic":
+      return <em key={key} className={colorClass}>{text}</em>;
+    case "code":
+      return (
+        <code key={key} className={`rounded bg-slate-700/50 px-1 py-0.5 text-xs ${colorClass}`}>
+          {text}
+        </code>
+      );
+    case "strike":
+      return <del key={key} className={colorClass}>{text}</del>;
+    default:
+      return <span key={key} className={colorClass}>{text}</span>;
+  }
+}
+
+function renderHighlightedMarkdown(
+  text: string,
+  highlightProgress: number,
+  readClass: string,
+  unreadClass: string,
+): React.ReactNode[] {
+  const segments = parseSegments(text);
+  const result: React.ReactNode[] = [];
+  let key = 0;
+  const highlightEnd = highlightProgress + 1; // exclusive
+
+  for (const seg of segments) {
+    if (seg.rawEnd <= highlightEnd) {
+      result.push(wrapSeg(seg.type, seg.content, readClass, key++));
+    } else if (seg.rawStart >= highlightEnd) {
+      result.push(wrapSeg(seg.type, seg.content, unreadClass, key++));
+    } else {
+      const offset = highlightEnd - seg.rawStart;
+      let readChars: number;
+      if (offset <= seg.markerLen) {
+        readChars = 0;
+      } else if (offset >= seg.rawEnd - seg.rawStart - seg.markerLen) {
+        readChars = seg.content.length;
+      } else {
+        readChars = offset - seg.markerLen;
+      }
+      readChars = Math.max(0, Math.min(readChars, seg.content.length));
+      const unreadChars = seg.content.length - readChars;
+      if (readChars > 0) {
+        result.push(wrapSeg(seg.type, seg.content.slice(0, readChars), readClass, `${key}-r`));
+      }
+      if (unreadChars > 0) {
+        result.push(wrapSeg(seg.type, seg.content.slice(readChars), unreadClass, `${key}-u`));
+      }
+      key++;
+    }
+  }
+  return result;
+}
+
 type FsDocument = Document & {
   webkitFullscreenElement?: Element | null;
   webkitExitFullscreen?: () => Promise<void> | void;
@@ -67,9 +183,8 @@ export default function ScreenPage() {
   const [scriptDraft, setScriptDraft] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [activeLine, setActiveLine] = useState(0);
-  const [lineInterval, setLineInterval] = useState(1500);
+  const [lineInterval, setLineInterval] = useState(3000);
   const [autoPlay, setAutoPlay] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scriptRef = useRef(script);
   scriptRef.current = script;
   const lineIntervalRef = useRef(lineInterval);
@@ -78,10 +193,9 @@ export default function ScreenPage() {
   autoPlayRef.current = autoPlay;
   const activeLineRef = useRef(activeLine);
   activeLineRef.current = activeLine;
-  const lineStartTimeRef = useRef(Date.now());
 
   const [telePos, setTelePos] = useState({ x: 0, y: 0 });
-  const [teleSize, setTeleSize] = useState({ w: 288, h: 192 });
+  const [teleSize, setTeleSize] = useState({ w: 320, h: 220 });
   const [showTeleprompter, setShowTeleprompter] = useState(true);
   const [highlightProgress, setHighlightProgress] = useState(0);
   const teleDragRef = useRef<{
@@ -95,6 +209,10 @@ export default function ScreenPage() {
   } | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  // Marquee continuous scroll refs
+  const lastFrameTimeRef = useRef(Date.now());
+  const scrollOffsetRef = useRef(0);
 
   const index = Math.min(
     Math.max(0, lastIndex),
@@ -176,42 +294,28 @@ export default function ScreenPage() {
   }, []);
 
   const stopPlay = useCallback(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
     setIsPlaying(false);
-  }, []);
-
-  const advanceLine = useCallback(() => {
-    setActiveLine((prev) => {
-      const next = prev + 1;
-      const lines = scriptRef.current.split("\n").filter((l) => l.trim() !== "");
-      return next >= lines.length ? 0 : next;
-    });
-    lineStartTimeRef.current = Date.now();
-    timerRef.current = setTimeout(() => {
-      advanceLine();
-    }, lineIntervalRef.current);
   }, []);
 
   const startPlay = useCallback(() => {
     stopPlay();
-    setIsPlaying(true);
+    const container = scrollContainerRef.current;
+    if (!container) return;
     const lines = scriptRef.current.split("\n").filter((l) => l.trim() !== "");
-    if (lines.length === 0) {
-      setIsPlaying(false);
-      return;
+    if (lines.length === 0) return;
+
+    // If near the end, loop back to start
+    const maxScroll = container.scrollHeight - container.clientHeight;
+    if (maxScroll > 0 && container.scrollTop >= maxScroll - 2) {
+      scrollOffsetRef.current = 0;
+      container.scrollTop = 0;
+    } else {
+      scrollOffsetRef.current = container.scrollTop;
     }
-    setActiveLine((prev) => {
-      if (prev >= lines.length - 1) return 0;
-      return prev;
-    });
-    lineStartTimeRef.current = Date.now();
-    timerRef.current = setTimeout(() => {
-      advanceLine();
-    }, lineIntervalRef.current);
-  }, [stopPlay, advanceLine]);
+
+    lastFrameTimeRef.current = Date.now();
+    setIsPlaying(true);
+  }, [stopPlay]);
 
   const togglePlay = useCallback(() => {
     if (isPlaying) {
@@ -273,17 +377,17 @@ export default function ScreenPage() {
   }, []);
 
   useEffect(() => {
+    if (isPlaying) return;
     const container = scrollContainerRef.current;
     const el = lineRefs.current[activeLine];
     if (!container || !el) return;
     const containerH = container.clientHeight;
     const elTop = el.offsetTop;
     const elH = el.clientHeight;
-    container.scrollTo({
-      top: elTop - containerH / 2 + elH / 2,
-      behavior: "auto",
-    });
-  }, [activeLine]);
+    const target = elTop - containerH / 2 + elH / 2;
+    container.scrollTo({ top: target, behavior: "smooth" });
+    scrollOffsetRef.current = target;
+  }, [activeLine, isPlaying]);
 
   useEffect(() => {
     if (!hasHydrated || skus.length === 0) return;
@@ -347,29 +451,81 @@ export default function ScreenPage() {
     }
   }, [index, skus, stopPlay, startPlay]);
 
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, []);
-
-  // 逐字高亮
+  // 跑马灯滚动 + Karaoke 高亮
   useEffect(() => {
     if (!isPlaying) return;
     let rafId: number;
+    const BASE_HEIGHT = 32;
+
     const tick = () => {
+      const container = scrollContainerRef.current;
+      if (!container) {
+        rafId = requestAnimationFrame(tick);
+        return;
+      }
+
+      const now = Date.now();
+      const delta = now - lastFrameTimeRef.current;
+      lastFrameTimeRef.current = now;
+
+      // 1. 恒定速度滚动
+      const speed = BASE_HEIGHT / lineIntervalRef.current;
+      scrollOffsetRef.current += delta * speed;
+
+      const maxScroll = container.scrollHeight - container.clientHeight;
+      if (maxScroll > 0 && scrollOffsetRef.current >= maxScroll) {
+        if (autoPlayRef.current) {
+          scrollOffsetRef.current = 0;
+        } else {
+          scrollOffsetRef.current = maxScroll;
+          stopPlay();
+          return;
+        }
+      }
+      container.scrollTop = scrollOffsetRef.current;
+
+      // 2. Karaoke 高亮 — 与真实滚动位置严格同步
       const lines = scriptRef.current.split("\n").filter((l) => l.trim() !== "");
-      const currentLine = lines[activeLineRef.current];
-      if (!currentLine) return;
-      const elapsed = Date.now() - lineStartTimeRef.current;
-      const progress = Math.min(1, elapsed / lineIntervalRef.current);
-      const idx = Math.floor(progress * currentLine.length);
-      setHighlightProgress(idx);
+      if (lines.length > 0) {
+        const readingY = scrollOffsetRef.current + container.clientHeight / 2;
+
+        // 找到最接近阅读引导线的行
+        let closestIdx = 0;
+        let minDist = Infinity;
+        for (let i = 0; i < lineRefs.current.length; i++) {
+          const el = lineRefs.current[i];
+          if (!el) continue;
+          const center = el.offsetTop + el.clientHeight / 2;
+          const dist = Math.abs(center - readingY);
+          if (dist < minDist) {
+            minDist = dist;
+            closestIdx = i;
+          }
+        }
+
+        const el = lineRefs.current[closestIdx];
+        if (el) {
+          const lineTop = el.offsetTop;
+          const lineH = el.clientHeight;
+          // progress: 0 = 行顶部刚到引导线, 1 = 行底部离开引导线
+          const progress = (readingY - lineTop) / lineH;
+          const lineText = lines[closestIdx] || "";
+          const highlightIdx = Math.max(
+            0,
+            Math.min(lineText.length, Math.floor(progress * lineText.length)),
+          );
+          setActiveLine(closestIdx);
+          setHighlightProgress(highlightIdx);
+        }
+      }
+
       rafId = requestAnimationFrame(tick);
     };
+
+    lastFrameTimeRef.current = Date.now();
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [isPlaying]);
+  }, [isPlaying, stopPlay]);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     gestureRef.current = {
@@ -563,7 +719,7 @@ export default function ScreenPage() {
           }}
         >
           <div
-            className="pointer-events-auto relative overflow-hidden rounded-2xl bg-slate-900/50 shadow-2xl backdrop-blur-md dark:bg-black/40"
+            className="pointer-events-auto relative overflow-hidden rounded-2xl bg-slate-900/85 shadow-2xl backdrop-blur-md dark:bg-black/80"
             style={{ width: teleSize.w, height: teleSize.h }}
           >
             {/* 关闭按钮 */}
@@ -603,9 +759,11 @@ export default function ScreenPage() {
             </div>
 
             {/* 顶部渐变遮罩 */}
-            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-16 bg-gradient-to-b from-slate-900/90 to-transparent dark:from-black/90" />
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-slate-900/90 to-transparent dark:from-black/90" />
             {/* 底部渐变遮罩 */}
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-16 bg-gradient-to-t from-slate-900/90 to-transparent dark:from-black/90" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-8 bg-gradient-to-t from-slate-900/90 to-transparent dark:from-black/90" />
+            {/* 阅读引导线 */}
+            <div className="pointer-events-none absolute inset-x-0 top-1/2 z-20 h-px -translate-y-1/2 bg-white/20" />
 
             {/* 滚动列表 */}
             <div
@@ -633,26 +791,20 @@ export default function ScreenPage() {
                     }}
                     className={`flex w-full shrink-0 items-center justify-center px-5 py-1.5 text-center ${
                       isCurrent
-                        ? "text-base font-bold sm:text-lg"
+                        ? "text-lg font-bold sm:text-xl"
                         : isRead
-                          ? "text-sm text-slate-400/50 sm:text-base"
-                          : "text-sm text-slate-300/30 sm:text-base"
+                          ? "text-sm text-slate-400/30 sm:text-base"
+                          : "text-sm text-slate-400/60 sm:text-base"
                     }`}
                   >
-                    {isCurrent ? (
+                    {isCurrent && isPlaying ? (
                       <span>
-                        {line.split("").map((char, ci) => (
-                          <span
-                            key={ci}
-                            className={
-                              ci <= highlightProgress
-                                ? "text-blue-400"
-                                : "text-slate-500/30"
-                            }
-                          >
-                            {char}
-                          </span>
-                        ))}
+                        {renderHighlightedMarkdown(
+                          line,
+                          highlightProgress,
+                          "text-blue-400 drop-shadow-[0_0_5px_rgba(96,165,250,0.7)]",
+                          "text-slate-500/30",
+                        )}
                       </span>
                     ) : (
                       <span>{parseMarkdown(line)}</span>
@@ -708,7 +860,7 @@ export default function ScreenPage() {
             </button>
           </div>
         ) : scriptLines.length > 0 ? (
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
             {!showTeleprompter && (
               <button
                 onClick={() => setShowTeleprompter(true)}
@@ -727,20 +879,30 @@ export default function ScreenPage() {
             </button>
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-500 dark:text-slate-400">
-                间隔
+                速度
               </span>
               <input
                 type="range"
-                min={300}
-                max={6000}
-                step={100}
+                min={500}
+                max={30000}
+                step={500}
                 value={lineInterval}
                 onChange={(e) => setLineInterval(Number(e.target.value))}
-                className="h-1 w-24 cursor-pointer appearance-none rounded bg-slate-200 accent-blue-600 dark:bg-slate-700 sm:w-32"
+                className="h-1 w-20 cursor-pointer appearance-none rounded bg-slate-200 accent-blue-600 dark:bg-slate-700 sm:w-28"
               />
-              <span className="text-xs tabular-nums text-slate-600 dark:text-slate-300">
-                {(lineInterval / 1000).toFixed(1)}s
-              </span>
+              <input
+                type="number"
+                min={0.5}
+                max={60}
+                step={0.5}
+                value={Number((lineInterval / 1000).toFixed(1))}
+                onChange={(e) => {
+                  const val = Math.max(0.5, Math.min(60, Number(e.target.value)));
+                  setLineInterval(Math.round(val * 1000));
+                }}
+                className="w-14 rounded border border-slate-300 bg-white px-1 py-0.5 text-center text-xs text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              />
+              <span className="text-xs text-slate-500 dark:text-slate-400">s</span>
             </div>
             <button
               onClick={beginEditScript}
