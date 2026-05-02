@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useHasHydrated, useSkuStore } from "@/lib/store";
+import { buildScriptPrompt, streamLlm } from "@/lib/llm";
 import ThemeToggle from "@/components/ThemeToggle";
 
 type FsDocument = Document & {
@@ -26,10 +27,16 @@ export default function ScreenPage() {
   const skus = useSkuStore((s) => s.skus);
   const lastIndex = useSkuStore((s) => s.lastIndex);
   const setLastIndex = useSkuStore((s) => s.setLastIndex);
+  const llmConfig = useSkuStore((s) => s.llmConfig);
   const hasHydrated = useHasHydrated();
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const gestureRef = useRef<Gesture | null>(null);
+
+  const [script, setScript] = useState("");
+  const [showScript, setShowScript] = useState(false);
+  const [scriptLoading, setScriptLoading] = useState(false);
+  const [scriptError, setScriptError] = useState<string | null>(null);
 
   const index = Math.min(
     Math.max(0, lastIndex),
@@ -68,6 +75,33 @@ export default function ScreenPage() {
     }
   }, []);
 
+  const handleGenerateScript = useCallback(async () => {
+    if (!llmConfig.apiKey) {
+      setScriptError("尚未配置 API Key");
+      setShowScript(true);
+      return;
+    }
+    const sku = skus[index];
+    if (!sku) return;
+    setScriptLoading(true);
+    setScript("");
+    setScriptError(null);
+    setShowScript(true);
+
+    try {
+      const messages = buildScriptPrompt(sku);
+      let full = "";
+      for await (const chunk of streamLlm(llmConfig, messages)) {
+        full += chunk;
+        setScript(full);
+      }
+    } catch (err) {
+      setScriptError(err instanceof Error ? err.message : "生成失败");
+    } finally {
+      setScriptLoading(false);
+    }
+  }, [llmConfig, skus, index]);
+
   useEffect(() => {
     if (!hasHydrated || skus.length === 0) return;
     const handler = (e: KeyboardEvent) => {
@@ -84,7 +118,11 @@ export default function ScreenPage() {
         goPrev();
       } else if (e.key === "Escape") {
         e.preventDefault();
-        router.push("/");
+        if (showScript) {
+          setShowScript(false);
+        } else {
+          router.push("/");
+        }
       } else if (e.key === "f" || e.key === "F") {
         e.preventDefault();
         toggleFullscreen();
@@ -92,7 +130,15 @@ export default function ScreenPage() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [hasHydrated, skus.length, goNext, goPrev, router, toggleFullscreen]);
+  }, [
+    hasHydrated,
+    skus.length,
+    goNext,
+    goPrev,
+    router,
+    toggleFullscreen,
+    showScript,
+  ]);
 
   useEffect(() => {
     const onChange = () => {
@@ -128,7 +174,6 @@ export default function ScreenPage() {
     const dist = Math.hypot(dx, dy);
     const dt = Date.now() - start.t;
 
-    // Horizontal swipe: > 50px, mostly horizontal, faster than 700ms.
     if (
       Math.abs(dx) > 50 &&
       Math.abs(dx) > Math.abs(dy) * 1.4 &&
@@ -139,7 +184,6 @@ export default function ScreenPage() {
       return;
     }
 
-    // Vertical swipe: swipe up = next, swipe down = prev.
     if (
       Math.abs(dy) > 50 &&
       Math.abs(dy) > Math.abs(dx) * 1.4 &&
@@ -150,7 +194,6 @@ export default function ScreenPage() {
       return;
     }
 
-    // Tap (barely moved): split-screen prev / next.
     if (dist < 12) {
       if (e.clientX < window.innerWidth / 2) goPrev();
       else goNext();
@@ -209,6 +252,13 @@ export default function ScreenPage() {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleGenerateScript}
+            disabled={scriptLoading}
+            className="rounded-lg border border-emerald-200 bg-white px-3 py-1 text-sm font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-900/50 dark:bg-slate-800 dark:text-emerald-400 dark:hover:bg-emerald-900/30"
+          >
+            {scriptLoading ? "生成中…" : "🎤 口播稿"}
+          </button>
           <ThemeToggle />
           <button
             onClick={toggleFullscreen}
@@ -224,7 +274,7 @@ export default function ScreenPage() {
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
-        className="animate-screen-in flex flex-1 cursor-pointer touch-none flex-col gap-3 overflow-hidden px-5 pb-3 sm:gap-6 sm:px-12 sm:pb-6"
+        className="animate-screen-in relative flex flex-1 cursor-pointer touch-none flex-col gap-3 overflow-hidden px-5 pb-3 sm:gap-6 sm:px-12 sm:pb-6"
       >
         <div className="flex flex-shrink-0 flex-wrap items-baseline gap-x-6 gap-y-1 border-b border-slate-200 pb-3 sm:gap-x-10 sm:pb-5 dark:border-slate-700">
           <h1 className="text-[clamp(1.35rem,7vmin,5.5rem)] font-bold tracking-wide">
@@ -267,6 +317,30 @@ export default function ScreenPage() {
               {sku.bannedWords.join("   /   ")}
             </p>
           </Section>
+        )}
+
+        {showScript && (
+          <div className="absolute inset-x-0 bottom-0 z-10 max-h-[50%] overflow-y-auto rounded-t-2xl border-t border-slate-200 bg-white/95 p-5 shadow-2xl backdrop-blur-sm sm:bottom-4 sm:left-auto sm:right-4 sm:max-h-[70%] sm:w-96 sm:rounded-2xl sm:border dark:border-slate-700 dark:bg-slate-900/95">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                🎤 口播逐字稿
+              </span>
+              <button
+                onClick={() => setShowScript(false)}
+                className="rounded-md p-1 text-lg leading-none text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                aria-label="关闭"
+              >
+                ✕
+              </button>
+            </div>
+            {scriptError ? (
+              <p className="text-sm text-rose-600 dark:text-rose-400">{scriptError}</p>
+            ) : (
+              <p className="whitespace-pre-wrap text-[clamp(0.85rem,2.4vmin,1.5rem)] leading-relaxed text-slate-800 dark:text-slate-100">
+                {script || (scriptLoading ? "生成中…" : "")}
+              </p>
+            )}
+          </div>
         )}
       </div>
 

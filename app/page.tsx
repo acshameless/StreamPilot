@@ -24,6 +24,8 @@ import {
 } from "@/lib/io";
 import type { SKU } from "@/types/sku";
 import SkuFormDialog from "@/components/SkuFormDialog";
+import SettingsDialog from "@/components/SettingsDialog";
+import AiGenerateDialog from "@/components/AiGenerateDialog";
 import ThemeToggle from "@/components/ThemeToggle";
 
 type DialogState =
@@ -146,6 +148,8 @@ export default function Home() {
   const hasHydrated = useHasHydrated();
 
   const [dialogState, setDialogState] = useState<DialogState>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showGenerate, setShowGenerate] = useState(false);
   const [query, setQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -285,9 +289,22 @@ export default function Home() {
           >
             + 新增<span className="hidden sm:inline"> SKU</span>
           </button>
+          <button
+            onClick={() => setShowGenerate(true)}
+            className={btnGhost}
+          >
+            🪄<span className="hidden sm:inline"> AI 生成</span>
+          </button>
           <Link href="/screen" className={btnDark}>
             进入大屏 →
           </Link>
+          <button
+            onClick={() => setShowSettings(true)}
+            className={btnGhost}
+            title="LLM 设置"
+          >
+            ⚙<span className="hidden sm:inline"> 设置</span>
+          </button>
           <input
             ref={fileInputRef}
             type="file"
@@ -402,6 +419,12 @@ export default function Home() {
           sku={dialogState.mode === "edit" ? dialogState.sku : undefined}
           onClose={() => setDialogState(null)}
         />
+      )}
+      {showSettings && (
+        <SettingsDialog onClose={() => setShowSettings(false)} />
+      )}
+      {showGenerate && (
+        <AiGenerateDialog onClose={() => setShowGenerate(false)} />
       )}
     </main>
   );

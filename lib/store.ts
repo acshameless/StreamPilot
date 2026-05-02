@@ -6,10 +6,27 @@ import { STORAGE_KEY, type ThemePref } from "./theme";
 
 export type { ThemePref } from "./theme";
 
+export type LLMProvider = "openai" | "anthropic" | "gemini" | "custom";
+
+export interface LLMConfig {
+  provider: LLMProvider;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+}
+
+const DEFAULT_LLM: LLMConfig = {
+  provider: "openai",
+  apiKey: "",
+  baseUrl: "https://api.openai.com/v1",
+  model: "gpt-4o-mini",
+};
+
 interface State {
   skus: SKU[];
   lastIndex: number;
   theme: ThemePref;
+  llmConfig: LLMConfig;
 }
 
 interface Actions {
@@ -20,6 +37,7 @@ interface Actions {
   replaceSkus: (skus: SKU[]) => void;
   reorderSkus: (activeId: string, overId: string) => void;
   setTheme: (theme: ThemePref) => void;
+  setLlmConfig: (cfg: LLMConfig) => void;
 }
 
 function newId(): string {
@@ -35,6 +53,7 @@ export const useSkuStore = create<State & Actions>()(
       skus: [],
       lastIndex: 0,
       theme: "system" as ThemePref,
+      llmConfig: DEFAULT_LLM,
       addSku: (input) => {
         const id = newId();
         set((s) => ({
@@ -78,6 +97,7 @@ export const useSkuStore = create<State & Actions>()(
           return { skus: next };
         }),
       setTheme: (theme) => set({ theme }),
+      setLlmConfig: (llmConfig) => set({ llmConfig }),
     }),
     {
       name: STORAGE_KEY,
@@ -86,6 +106,7 @@ export const useSkuStore = create<State & Actions>()(
         skus: s.skus,
         lastIndex: s.lastIndex,
         theme: s.theme,
+        llmConfig: s.llmConfig,
       }),
     },
   ),

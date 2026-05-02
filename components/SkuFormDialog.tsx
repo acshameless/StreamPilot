@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useSkuStore } from "@/lib/store";
 import { arrayToLines, linesToArray } from "@/lib/format";
-import type { SKU } from "@/types/sku";
+import { buildOptimizePrompt, streamLlm, extractJson } from "@/lib/llm";
+import type { SKU, SkuInput } from "@/types/sku";
 
 interface Props {
   mode: "create" | "edit";
@@ -17,6 +18,7 @@ const inputClass =
 export default function SkuFormDialog({ mode, sku, onClose }: Props) {
   const addSku = useSkuStore((s) => s.addSku);
   const updateSku = useSkuStore((s) => s.updateSku);
+  const llmConfig = useSkuStore((s) => s.llmConfig);
 
   const [name, setName] = useState(sku?.name ?? "");
   const [price, setPrice] = useState(sku?.price ?? "");
@@ -27,6 +29,10 @@ export default function SkuFormDialog({ mode, sku, onClose }: Props) {
   const [bannedWordsText, setBannedWordsText] = useState(
     sku ? arrayToLines(sku.bannedWords) : "",
   );
+
+  const [optimizing, setOptimizing] = useState(false);
+  const [optimizePreview, setOptimizePreview] = useState("");
+  const [optimizeError, setOptimizeError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,6 +56,52 @@ export default function SkuFormDialog({ mode, sku, onClose }: Props) {
     onClose();
   };
 
+  const handleOptimize = async () => {
+    if (!llmConfig.apiKey) {
+      setOptimizeError("尚未配置 API Key，请先到设置中配置 LLM");
+      return;
+    }
+    setOptimizing(true);
+    setOptimizePreview("");
+    setOptimizeError(null);
+
+    const input: SkuInput = {
+      name,
+      price,
+      material,
+      sellingPoints: linesToArray(sellingPointsText),
+      bannedWords: linesToArray(bannedWordsText),
+    };
+
+    try {
+      const messages = buildOptimizePrompt(input);
+      let full = "";
+      for await (const chunk of streamLlm(llmConfig, messages)) {
+        full += chunk;
+        setOptimizePreview(full);
+      }
+    } catch (err) {
+      setOptimizeError(err instanceof Error ? err.message : "优化失败");
+    } finally {
+      setOptimizing(false);
+    }
+  };
+
+  const applyOptimize = () => {
+    const parsed = extractJson<SkuInput>(optimizePreview);
+    if (!parsed) {
+      setOptimizeError("无法解析 AI 返回结果");
+      return;
+    }
+    if (parsed.name) setName(parsed.name);
+    if (parsed.price) setPrice(parsed.price);
+    if (parsed.material !== undefined) setMaterial(parsed.material);
+    if (parsed.sellingPoints) setSellingPointsText(arrayToLines(parsed.sellingPoints));
+    if (parsed.bannedWords) setBannedWordsText(arrayToLines(parsed.bannedWords));
+    setOptimizePreview("");
+    setOptimizeError(null);
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm dark:bg-black/70"
@@ -57,7 +109,7 @@ export default function SkuFormDialog({ mode, sku, onClose }: Props) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-900 dark:shadow-black/40">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-900 dark:shadow-black/40 max-h-[90vh] flex flex-col">
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             {mode === "create" ? "新增 SKU" : "编辑 SKU"}
@@ -72,7 +124,7 @@ export default function SkuFormDialog({ mode, sku, onClose }: Props) {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm overflow-y-auto">
           <Field label="商品名称" required>
             <input
               type="text"
@@ -125,7 +177,51 @@ export default function SkuFormDialog({ mode, sku, onClose }: Props) {
             />
           </Field>
 
+          {optimizePreview && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+              <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                AI 优化预览
+              </p>
+              <pre className="whitespace-pre-wrap text-xs text-slate-700 dark:text-slate-200">
+                {optimizePreview}
+              </pre>
+              <div className="mt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOptimizePreview("");
+                    setOptimizeError(null);
+                  }}
+                  className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={applyOptimize}
+                  className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white transition hover:bg-blue-700"
+                >
+                  应用
+                </button>
+              </div>
+            </div>
+          )}
+
+          {optimizeError && (
+            <p className="text-xs text-rose-600 dark:text-rose-400">
+              {optimizeError}
+            </p>
+          )}
+
           <div className="mt-2 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={handleOptimize}
+              disabled={optimizing}
+              className="rounded-lg border border-emerald-200 bg-white px-4 py-2 font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-900/50 dark:bg-slate-800 dark:text-emerald-400 dark:hover:bg-emerald-900/30"
+            >
+              {optimizing ? "优化中…" : "✨ AI 优化"}
+            </button>
             <button
               type="button"
               onClick={onClose}
