@@ -93,6 +93,8 @@ export default function ScreenPage() {
     pw: number;
     ph: number;
   } | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const index = Math.min(
     Math.max(0, lastIndex),
@@ -269,6 +271,19 @@ export default function ScreenPage() {
     setIsEditingScript(false);
     setScriptDraft("");
   }, []);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    const el = lineRefs.current[activeLine];
+    if (!container || !el) return;
+    const containerH = container.clientHeight;
+    const elTop = el.offsetTop;
+    const elH = el.clientHeight;
+    container.scrollTo({
+      top: elTop - containerH / 2 + elH / 2,
+      behavior: "auto",
+    });
+  }, [activeLine]);
 
   useEffect(() => {
     if (!hasHydrated || skus.length === 0) return;
@@ -594,18 +609,29 @@ export default function ScreenPage() {
 
             {/* 滚动列表 */}
             <div
-              className="flex flex-col items-center transition-transform duration-500 ease-out"
+              ref={scrollContainerRef}
+              className="flex flex-col items-center overflow-y-auto"
               style={{
-                transform: `translateY(${teleSize.h / 2 - (activeLine + 0.5) * 40}px)`,
+                height: teleSize.h,
+                scrollbarWidth: "none",
+                msOverflowStyle: "none",
               }}
             >
+              <style jsx>{`
+                div::-webkit-scrollbar {
+                  display: none;
+                }
+              `}</style>
               {scriptLines.map((line, i) => {
                 const isRead = i < activeLine;
                 const isCurrent = i === activeLine;
                 return (
                   <div
                     key={i}
-                    className={`flex h-10 w-full shrink-0 items-center justify-center px-5 text-center ${
+                    ref={(el) => {
+                      lineRefs.current[i] = el;
+                    }}
+                    className={`flex w-full shrink-0 items-center justify-center px-5 py-1.5 text-center ${
                       isCurrent
                         ? "text-base font-bold sm:text-lg"
                         : isRead
@@ -614,7 +640,7 @@ export default function ScreenPage() {
                     }`}
                   >
                     {isCurrent ? (
-                      <span className="line-clamp-1">
+                      <span>
                         {line.split("").map((char, ci) => (
                           <span
                             key={ci}
@@ -629,9 +655,7 @@ export default function ScreenPage() {
                         ))}
                       </span>
                     ) : (
-                      <span className="line-clamp-1">
-                        {parseMarkdown(line)}
-                      </span>
+                      <span>{parseMarkdown(line)}</span>
                     )}
                   </div>
                 );
