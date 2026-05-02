@@ -76,6 +76,9 @@ export default function ScreenPage() {
   lineIntervalRef.current = lineInterval;
   const autoPlayRef = useRef(autoPlay);
   autoPlayRef.current = autoPlay;
+  const activeLineRef = useRef(activeLine);
+  activeLineRef.current = activeLine;
+  const lineStartTimeRef = useRef(Date.now());
 
   const [telePos, setTelePos] = useState({ x: 0, y: 0 });
   const [teleSize, setTeleSize] = useState({ w: 288, h: 192 });
@@ -182,12 +185,12 @@ export default function ScreenPage() {
     setActiveLine((prev) => {
       const next = prev + 1;
       const lines = scriptRef.current.split("\n").filter((l) => l.trim() !== "");
-      const actualNext = next >= lines.length ? 0 : next;
-      timerRef.current = setTimeout(() => {
-        advanceLine();
-      }, lineIntervalRef.current);
-      return actualNext;
+      return next >= lines.length ? 0 : next;
     });
+    lineStartTimeRef.current = Date.now();
+    timerRef.current = setTimeout(() => {
+      advanceLine();
+    }, lineIntervalRef.current);
   }, []);
 
   const startPlay = useCallback(() => {
@@ -202,6 +205,7 @@ export default function ScreenPage() {
       if (prev >= lines.length - 1) return 0;
       return prev;
     });
+    lineStartTimeRef.current = Date.now();
     timerRef.current = setTimeout(() => {
       advanceLine();
     }, lineIntervalRef.current);
@@ -337,25 +341,20 @@ export default function ScreenPage() {
   // 逐字高亮
   useEffect(() => {
     if (!isPlaying) return;
-    const lines = scriptRef.current.split("\n").filter((l) => l.trim() !== "");
-    const currentLine = lines[activeLine];
-    if (!currentLine) return;
-    setHighlightProgress(0);
-    const duration = lineInterval;
-    const lineStartTime = Date.now();
     let rafId: number;
     const tick = () => {
-      const elapsed = Date.now() - lineStartTime;
-      const progress = Math.min(1, elapsed / duration);
+      const lines = scriptRef.current.split("\n").filter((l) => l.trim() !== "");
+      const currentLine = lines[activeLineRef.current];
+      if (!currentLine) return;
+      const elapsed = Date.now() - lineStartTimeRef.current;
+      const progress = Math.min(1, elapsed / lineIntervalRef.current);
       const idx = Math.floor(progress * currentLine.length);
       setHighlightProgress(idx);
-      if (progress < 1) {
-        rafId = requestAnimationFrame(tick);
-      }
+      rafId = requestAnimationFrame(tick);
     };
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [isPlaying, activeLine, lineInterval]);
+  }, [isPlaying]);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     gestureRef.current = {
