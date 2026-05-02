@@ -19,7 +19,7 @@ function parseMarkdown(text: string): React.ReactNode[] {
       parts.push(
         <code
           key={m.index}
-          className="rounded bg-slate-700/50 px-1 py-0.5 text-xs"
+          className="rounded bg-slate-200/80 px-1 py-0.5 text-xs dark:bg-slate-700/50"
         >
           {m[5]}
         </code>,
@@ -96,7 +96,7 @@ function wrapSeg(
       return <em key={key} className={colorClass}>{text}</em>;
     case "code":
       return (
-        <code key={key} className={`rounded bg-slate-700/50 px-1 py-0.5 text-xs ${colorClass}`}>
+        <code key={key} className={`rounded bg-slate-200/80 px-1 py-0.5 text-xs dark:bg-slate-700/50 ${colorClass}`}>
           {text}
         </code>
       );
@@ -207,12 +207,14 @@ export default function ScreenPage() {
     pw: number;
     ph: number;
   } | null>(null);
+  const teleContainerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // Marquee continuous scroll refs
   const lastFrameTimeRef = useRef(Date.now());
   const scrollOffsetRef = useRef(0);
+  const contentHeightRef = useRef(0);
 
   const index = Math.min(
     Math.max(0, lastIndex),
@@ -299,19 +301,21 @@ export default function ScreenPage() {
 
   const startPlay = useCallback(() => {
     stopPlay();
-    const container = scrollContainerRef.current;
-    if (!container) return;
+    const inner = scrollContainerRef.current;
+    if (!inner) return;
     const lines = scriptRef.current.split("\n").filter((l) => l.trim() !== "");
     if (lines.length === 0) return;
 
-    // If near the end, loop back to start
-    const maxScroll = container.scrollHeight - container.clientHeight;
-    if (maxScroll > 0 && container.scrollTop >= maxScroll - 2) {
-      scrollOffsetRef.current = 0;
-      container.scrollTop = 0;
+    // 从当前 transform 位置恢复播放
+    const match = inner.style.transform.match(/translateY\(([-\d.]+)px\)/);
+    const currentOffset = match ? -parseFloat(match[1]) : 0;
+    if (currentOffset < 10) {
+      // 从开头播放：让第一行从视口下方开始滚动上来
+      scrollOffsetRef.current = -Math.round(teleSize.h * 0.6);
     } else {
-      scrollOffsetRef.current = container.scrollTop;
+      scrollOffsetRef.current = currentOffset;
     }
+    contentHeightRef.current = 0; // 重新测量
 
     lastFrameTimeRef.current = Date.now();
     setIsPlaying(true);
@@ -378,16 +382,19 @@ export default function ScreenPage() {
 
   useEffect(() => {
     if (isPlaying) return;
-    const container = scrollContainerRef.current;
     const el = lineRefs.current[activeLine];
-    if (!container || !el) return;
-    const containerH = container.clientHeight;
+    if (!el) return;
+    const containerH = teleContainerRef.current?.clientHeight ?? teleSize.h;
     const elTop = el.offsetTop;
     const elH = el.clientHeight;
     const target = elTop - containerH / 2 + elH / 2;
-    container.scrollTo({ top: target, behavior: "smooth" });
+    const inner = scrollContainerRef.current;
+    if (inner) {
+      inner.style.transform = `translateY(${-target}px)`;
+    }
     scrollOffsetRef.current = target;
-  }, [activeLine, isPlaying]);
+    contentHeightRef.current = 0; // 下次播放前重新测量
+  }, [activeLine, isPlaying, teleSize.h]);
 
   useEffect(() => {
     if (!hasHydrated || skus.length === 0) return;
@@ -458,8 +465,9 @@ export default function ScreenPage() {
     const BASE_HEIGHT = 32;
 
     const tick = () => {
-      const container = scrollContainerRef.current;
-      if (!container) {
+      const outer = teleContainerRef.current;
+      const inner = scrollContainerRef.current;
+      if (!outer || !inner) {
         rafId = requestAnimationFrame(tick);
         return;
       }
@@ -468,28 +476,30 @@ export default function ScreenPage() {
       const delta = now - lastFrameTimeRef.current;
       lastFrameTimeRef.current = now;
 
-      // 1. 恒定速度滚动
+      // 1. 恒定速度滚动（transform，GPU 加速）
       const speed = BASE_HEIGHT / lineIntervalRef.current;
       scrollOffsetRef.current += delta * speed;
 
-      const maxScroll = container.scrollHeight - container.clientHeight;
-      if (maxScroll > 0 && scrollOffsetRef.current >= maxScroll) {
-        if (autoPlayRef.current) {
-          scrollOffsetRef.current = 0;
-        } else {
-          scrollOffsetRef.current = maxScroll;
-          stopPlay();
-          return;
+      // 精确测量单份内容高度
+      let contentHeight = contentHeightRef.current;
+      if (contentHeight === 0) {
+        const lastEl = lineRefs.current[scriptLines.length - 1];
+        if (lastEl) {
+          contentHeight = lastEl.offsetTop + lastEl.clientHeight;
+          contentHeightRef.current = contentHeight;
         }
       }
-      container.scrollTop = scrollOffsetRef.current;
+      if (contentHeight > 10 && scrollOffsetRef.current >= contentHeight) {
+        scrollOffsetRef.current -= contentHeight;
+      }
+      inner.style.transform = `translateY(${-scrollOffsetRef.current}px)`;
 
       // 2. Karaoke 高亮 — 与真实滚动位置严格同步
       const lines = scriptRef.current.split("\n").filter((l) => l.trim() !== "");
       if (lines.length > 0) {
-        const readingY = scrollOffsetRef.current + container.clientHeight / 2;
+        const readingY = scrollOffsetRef.current + outer.clientHeight / 2;
 
-        // 找到最接近阅读引导线的行
+        // 在双份内容中查找最接近阅读引导线的行
         let closestIdx = 0;
         let minDist = Infinity;
         for (let i = 0; i < lineRefs.current.length; i++) {
@@ -507,14 +517,14 @@ export default function ScreenPage() {
         if (el) {
           const lineTop = el.offsetTop;
           const lineH = el.clientHeight;
-          // progress: 0 = 行顶部刚到引导线, 1 = 行底部离开引导线
           const progress = (readingY - lineTop) / lineH;
-          const lineText = lines[closestIdx] || "";
+          const actualIdx = closestIdx % lines.length;
+          const lineText = lines[actualIdx] || "";
           const highlightIdx = Math.max(
             0,
             Math.min(lineText.length, Math.floor(progress * lineText.length)),
           );
-          setActiveLine(closestIdx);
+          setActiveLine(actualIdx);
           setHighlightProgress(highlightIdx);
         }
       }
@@ -719,13 +729,13 @@ export default function ScreenPage() {
           }}
         >
           <div
-            className="pointer-events-auto relative overflow-hidden rounded-2xl bg-slate-900/85 shadow-2xl backdrop-blur-md dark:bg-black/80"
+            className="pointer-events-auto relative overflow-hidden rounded-2xl border border-slate-200/60 bg-slate-100/90 shadow-2xl backdrop-blur-md dark:border-slate-700/40 dark:bg-slate-900/90"
             style={{ width: teleSize.w, height: teleSize.h }}
           >
             {/* 关闭按钮 */}
             <button
               onClick={() => setShowTeleprompter(false)}
-              className="absolute right-1 top-1 z-30 flex h-5 w-5 items-center justify-center rounded-full text-xs text-white/60 transition hover:bg-white/20 hover:text-white"
+              className="absolute right-1 top-1 z-30 flex h-5 w-5 items-center justify-center rounded-full text-xs text-slate-500/60 transition hover:bg-slate-200 hover:text-slate-900 dark:text-white/60 dark:hover:bg-white/20 dark:hover:text-white"
               title="关闭提词器"
             >
               ✕
@@ -738,7 +748,7 @@ export default function ScreenPage() {
               onPointerMove={onTeleDragMove}
               onPointerUp={onTeleDragUp}
             >
-              <div className="h-1 w-8 rounded-full bg-white/30" />
+              <div className="h-1 w-8 rounded-full bg-slate-400/30 dark:bg-white/30" />
             </div>
 
             {/* 缩放手柄 */}
@@ -748,7 +758,7 @@ export default function ScreenPage() {
               onPointerMove={onTeleDragMove}
               onPointerUp={onTeleDragUp}
             >
-              <svg viewBox="0 0 16 16" className="h-4 w-4 text-white/40">
+              <svg viewBox="0 0 16 16" className="h-4 w-4 text-slate-400/40 dark:text-white/40">
                 <path
                   d="M6 14L14 6M10 14L14 10M14 14V6"
                   stroke="currentColor"
@@ -759,59 +769,96 @@ export default function ScreenPage() {
             </div>
 
             {/* 顶部渐变遮罩 */}
-            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-slate-900/90 to-transparent dark:from-black/90" />
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-slate-100/90 to-transparent dark:from-slate-900/90" />
             {/* 底部渐变遮罩 */}
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-8 bg-gradient-to-t from-slate-900/90 to-transparent dark:from-black/90" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-8 bg-gradient-to-t from-slate-100/90 to-transparent dark:from-slate-900/90" />
             {/* 阅读引导线 */}
-            <div className="pointer-events-none absolute inset-x-0 top-1/2 z-20 h-px -translate-y-1/2 bg-white/20" />
+            <div className="pointer-events-none absolute inset-x-0 top-1/2 z-20 h-px -translate-y-1/2 bg-slate-400/30 dark:bg-white/20" />
 
-            {/* 滚动列表 */}
+            {/* 滚动列表 — 双份渲染 + transform 实现真正无缝循环 */}
             <div
-              ref={scrollContainerRef}
-              className="flex flex-col items-center overflow-y-auto"
-              style={{
-                height: teleSize.h,
-                scrollbarWidth: "none",
-                msOverflowStyle: "none",
-              }}
+              ref={teleContainerRef}
+              className="relative overflow-hidden"
+              style={{ height: teleSize.h }}
             >
-              <style jsx>{`
-                div::-webkit-scrollbar {
-                  display: none;
-                }
-              `}</style>
-              {scriptLines.map((line, i) => {
-                const isRead = i < activeLine;
-                const isCurrent = i === activeLine;
-                return (
-                  <div
-                    key={i}
-                    ref={(el) => {
-                      lineRefs.current[i] = el;
-                    }}
-                    className={`flex w-full shrink-0 items-center justify-center px-5 py-1.5 text-center ${
-                      isCurrent
-                        ? "text-lg font-bold sm:text-xl"
-                        : isRead
-                          ? "text-sm text-slate-400/30 sm:text-base"
-                          : "text-sm text-slate-400/60 sm:text-base"
-                    }`}
-                  >
-                    {isCurrent && isPlaying ? (
-                      <span>
-                        {renderHighlightedMarkdown(
-                          line,
-                          highlightProgress,
-                          "text-blue-400 drop-shadow-[0_0_5px_rgba(96,165,250,0.7)]",
-                          "text-slate-500/30",
-                        )}
-                      </span>
-                    ) : (
-                      <span>{parseMarkdown(line)}</span>
-                    )}
-                  </div>
-                );
-              })}
+              <div
+                ref={scrollContainerRef}
+                className="flex flex-col items-center"
+                style={{ willChange: "transform" }}
+              >
+                {/* 第一份 */}
+                {scriptLines.map((line, i) => {
+                  const isRead = i < activeLine;
+                  const isCurrent = i === activeLine;
+                  const lineClass = isPlaying
+                    ? isCurrent
+                      ? "text-base font-bold text-slate-900 dark:text-white sm:text-lg"
+                      : "text-sm text-slate-400/50 dark:text-slate-400/40 sm:text-base"
+                    : isCurrent
+                      ? "text-lg font-bold text-slate-900 dark:text-white sm:text-xl"
+                      : isRead
+                        ? "text-sm text-slate-400/40 dark:text-slate-400/30 sm:text-base"
+                        : "text-sm text-slate-500/60 dark:text-slate-400/50 sm:text-base";
+                  return (
+                    <div
+                      key={`a-${i}`}
+                      ref={(el) => {
+                        lineRefs.current[i] = el;
+                      }}
+                      className={`flex w-full shrink-0 items-center justify-center px-5 py-1.5 text-center ${lineClass}`}
+                    >
+                      {isCurrent && isPlaying ? (
+                        <span>
+                          {renderHighlightedMarkdown(
+                            line,
+                            highlightProgress,
+                            "text-blue-600 drop-shadow-[0_0_4px_rgba(37,99,235,0.4)] dark:text-blue-400 dark:drop-shadow-[0_0_5px_rgba(96,165,250,0.7)]",
+                            "text-slate-400/50 dark:text-slate-500/30",
+                          )}
+                        </span>
+                      ) : (
+                        <span>{parseMarkdown(line)}</span>
+                      )}
+                    </div>
+                  );
+                })}
+                {/* 第二份（无缝衔接，样式与第一份同步） */}
+                {scriptLines.map((line, i) => {
+                  const isRead = i < activeLine;
+                  const isCurrent = i === activeLine;
+                  const lineClass = isPlaying
+                    ? isCurrent
+                      ? "text-base font-bold text-slate-900 dark:text-white sm:text-lg"
+                      : "text-sm text-slate-400/50 dark:text-slate-400/40 sm:text-base"
+                    : isCurrent
+                      ? "text-lg font-bold text-slate-900 dark:text-white sm:text-xl"
+                      : isRead
+                        ? "text-sm text-slate-400/40 dark:text-slate-400/30 sm:text-base"
+                        : "text-sm text-slate-500/60 dark:text-slate-400/50 sm:text-base";
+                  return (
+                    <div
+                      key={`b-${i}`}
+                      ref={(el) => {
+                        lineRefs.current[scriptLines.length + i] = el;
+                      }}
+                      className={`flex w-full shrink-0 items-center justify-center px-5 py-1.5 text-center ${lineClass}`}
+                    >
+                      {isCurrent && isPlaying ? (
+                        <span>
+                          {renderHighlightedMarkdown(
+                            line,
+                            highlightProgress,
+                            "text-blue-600 drop-shadow-[0_0_4px_rgba(37,99,235,0.4)] dark:text-blue-400 dark:drop-shadow-[0_0_5px_rgba(96,165,250,0.7)]",
+                            "text-slate-400/50 dark:text-slate-500/30",
+                          )}
+                        </span>
+                      ) : (
+                        <span>{parseMarkdown(line)}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
