@@ -54,6 +54,7 @@ export default function ScreenPage() {
 
   const [telePos, setTelePos] = useState({ x: 0, y: 0 });
   const [teleSize, setTeleSize] = useState({ w: 288, h: 192 });
+  const [showTeleprompter, setShowTeleprompter] = useState(true);
   const teleDragRef = useRef<{
     type: "drag" | "resize";
     sx: number;
@@ -492,7 +493,7 @@ export default function ScreenPage() {
       </div>
 
       {/* 中央歌词提词器 */}
-      {scriptLines.length > 0 && !isEditingScript && !scriptError && (
+      {scriptLines.length > 0 && !isEditingScript && !scriptError && showTeleprompter && (
         <div
           className="pointer-events-none fixed z-30"
           style={{
@@ -505,6 +506,15 @@ export default function ScreenPage() {
             className="pointer-events-auto relative overflow-hidden rounded-2xl bg-slate-900/50 shadow-2xl backdrop-blur-md dark:bg-black/40"
             style={{ width: teleSize.w, height: teleSize.h }}
           >
+            {/* 关闭按钮 */}
+            <button
+              onClick={() => setShowTeleprompter(false)}
+              className="absolute right-1 top-1 z-30 flex h-5 w-5 items-center justify-center rounded-full text-xs text-white/60 transition hover:bg-white/20 hover:text-white"
+              title="关闭提词器"
+            >
+              ✕
+            </button>
+
             {/* 拖拽手柄 */}
             <div
               className="absolute inset-x-0 top-0 z-20 flex h-5 cursor-move items-center justify-center"
@@ -611,6 +621,15 @@ export default function ScreenPage() {
           </div>
         ) : scriptLines.length > 0 ? (
           <div className="flex items-center gap-3">
+            {!showTeleprompter && (
+              <button
+                onClick={() => setShowTeleprompter(true)}
+                className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                title="显示提词器"
+              >
+                📜 显示
+              </button>
+            )}
             <button
               onClick={togglePlay}
               className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
