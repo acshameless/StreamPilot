@@ -30,9 +30,46 @@ export default function SkuFormDialog({ mode, sku, onClose }: Props) {
     sku ? arrayToLines(sku.bannedWords) : "",
   );
 
+  const [imageUrl, setImageUrl] = useState(sku?.imageUrl ?? "");
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
   const [optimizing, setOptimizing] = useState(false);
   const [optimizePreview, setOptimizePreview] = useState("");
   const [optimizeError, setOptimizeError] = useState<string | null>(null);
+
+  const r2Config = useSkuStore((s) => s.r2Config);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!r2Config.accessKeyId || !r2Config.secretAccessKey || !r2Config.bucket) {
+      setUploadError("尚未配置 R2，请先到设置中填写");
+      return;
+    }
+    setUploading(true);
+    setUploadError(null);
+
+    const form = new FormData();
+    form.append("file", file);
+    form.append("accountId", r2Config.accountId);
+    form.append("accessKeyId", r2Config.accessKeyId);
+    form.append("secretAccessKey", r2Config.secretAccessKey);
+    form.append("bucket", r2Config.bucket);
+    form.append("publicUrl", r2Config.publicUrl);
+
+    try {
+      const res = await fetch("/api/upload", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "上传失败");
+      setImageUrl(data.url);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "上传失败");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,6 +83,7 @@ export default function SkuFormDialog({ mode, sku, onClose }: Props) {
       material: material.trim(),
       sellingPoints: linesToArray(sellingPointsText),
       bannedWords: linesToArray(bannedWordsText),
+      imageUrl,
     };
 
     if (mode === "create") {
@@ -176,6 +214,40 @@ export default function SkuFormDialog({ mode, sku, onClose }: Props) {
               className={inputClass}
             />
           </Field>
+
+          <div className="flex flex-col gap-1.5">
+            <span className="font-medium text-slate-700 dark:text-slate-200">商品图片</span>
+            {imageUrl ? (
+              <div className="relative inline-block w-fit">
+                <img
+                  src={imageUrl}
+                  alt="商品预览"
+                  className="h-32 w-auto rounded-lg border border-slate-200 object-cover dark:border-slate-700"
+                />
+                <button
+                  type="button"
+                  onClick={() => setImageUrl("")}
+                  className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-rose-500 text-xs text-white shadow"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500 transition hover:border-slate-400 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-200">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                  disabled={uploading}
+                />
+                {uploading ? "上传中…" : "📷 选择图片"}
+              </label>
+            )}
+            {uploadError && (
+              <p className="text-xs text-rose-600 dark:text-rose-400">{uploadError}</p>
+            )}
+          </div>
 
           {optimizePreview && (
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">

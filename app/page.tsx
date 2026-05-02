@@ -56,6 +56,14 @@ function SkuCardBody({
 }: { sku: SKU; index: number } & CardActions) {
   return (
     <>
+      {sku.imageUrl && (
+        <img
+          src={sku.imageUrl}
+          alt={sku.name}
+          className="h-32 w-full rounded-lg border border-slate-200 object-cover dark:border-slate-700"
+          loading="lazy"
+        />
+      )}
       <div className="flex items-baseline justify-between gap-2">
         <div className="flex min-w-0 items-baseline gap-2">
           <span className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-slate-500 dark:bg-slate-800 dark:text-slate-400">

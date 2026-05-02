@@ -15,6 +15,14 @@ export interface LLMConfig {
   model: string;
 }
 
+export interface R2Config {
+  accountId: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  bucket: string;
+  publicUrl: string;
+}
+
 const DEFAULT_LLM: LLMConfig = {
   provider: "openai",
   apiKey: "",
@@ -22,11 +30,20 @@ const DEFAULT_LLM: LLMConfig = {
   model: "gpt-4o-mini",
 };
 
+const DEFAULT_R2: R2Config = {
+  accountId: "",
+  accessKeyId: "",
+  secretAccessKey: "",
+  bucket: "",
+  publicUrl: "",
+};
+
 interface State {
   skus: SKU[];
   lastIndex: number;
   theme: ThemePref;
   llmConfig: LLMConfig;
+  r2Config: R2Config;
 }
 
 interface Actions {
@@ -38,6 +55,7 @@ interface Actions {
   reorderSkus: (activeId: string, overId: string) => void;
   setTheme: (theme: ThemePref) => void;
   setLlmConfig: (cfg: LLMConfig) => void;
+  setR2Config: (cfg: R2Config) => void;
 }
 
 function newId(): string {
@@ -54,6 +72,7 @@ export const useSkuStore = create<State & Actions>()(
       lastIndex: 0,
       theme: "system" as ThemePref,
       llmConfig: DEFAULT_LLM,
+      r2Config: DEFAULT_R2,
       addSku: (input) => {
         const id = newId();
         set((s) => ({
@@ -61,6 +80,7 @@ export const useSkuStore = create<State & Actions>()(
             ...s.skus,
             {
               ...input,
+              imageUrl: input.imageUrl ?? "",
               id,
               createdAt: Date.now(),
               updatedAt: Date.now(),
@@ -72,7 +92,14 @@ export const useSkuStore = create<State & Actions>()(
       updateSku: (id, input) =>
         set((s) => ({
           skus: s.skus.map((sku) =>
-            sku.id === id ? { ...sku, ...input, updatedAt: Date.now() } : sku,
+            sku.id === id
+              ? {
+                  ...sku,
+                  ...input,
+                  imageUrl: input.imageUrl ?? sku.imageUrl,
+                  updatedAt: Date.now(),
+                }
+              : sku,
           ),
         })),
       deleteSku: (id) =>
@@ -98,6 +125,7 @@ export const useSkuStore = create<State & Actions>()(
         }),
       setTheme: (theme) => set({ theme }),
       setLlmConfig: (llmConfig) => set({ llmConfig }),
+      setR2Config: (r2Config) => set({ r2Config }),
     }),
     {
       name: STORAGE_KEY,
@@ -107,6 +135,7 @@ export const useSkuStore = create<State & Actions>()(
         lastIndex: s.lastIndex,
         theme: s.theme,
         llmConfig: s.llmConfig,
+        r2Config: s.r2Config,
       }),
     },
   ),

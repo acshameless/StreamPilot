@@ -97,6 +97,7 @@ export function parseSkusFromJson(text: string): ImportResult {
       material: asString(raw.material),
       sellingPoints: asStringArray(raw.sellingPoints),
       bannedWords: asStringArray(raw.bannedWords),
+      imageUrl: asString(raw.imageUrl),
       createdAt: asNumber(raw.createdAt, now),
       updatedAt: asNumber(raw.updatedAt, now),
     });

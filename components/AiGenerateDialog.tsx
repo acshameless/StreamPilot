@@ -52,7 +52,7 @@ export default function AiGenerateDialog({ onClose }: Props) {
 
   const handleSave = () => {
     if (!parsed) return;
-    addSku(parsed);
+    addSku({ ...parsed, imageUrl: parsed.imageUrl ?? "" });
     onClose();
   };
 

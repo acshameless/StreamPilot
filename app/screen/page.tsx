@@ -274,49 +274,61 @@ export default function ScreenPage() {
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
-        className="animate-screen-in relative flex flex-1 cursor-pointer touch-none flex-col gap-3 overflow-hidden px-5 pb-3 sm:gap-6 sm:px-12 sm:pb-6"
+        className="animate-screen-in relative flex flex-1 cursor-pointer touch-none flex-col gap-3 overflow-hidden px-5 pb-3 sm:flex-row sm:gap-6 sm:px-12 sm:pb-6"
       >
-        <div className="flex flex-shrink-0 flex-wrap items-baseline gap-x-6 gap-y-1 border-b border-slate-200 pb-3 sm:gap-x-10 sm:pb-5 dark:border-slate-700">
-          <h1 className="text-[clamp(1.35rem,7vmin,5.5rem)] font-bold tracking-wide">
-            {sku.name}
-          </h1>
-          <span className="text-[clamp(1.35rem,7vmin,5.5rem)] font-semibold text-amber-600 dark:text-yellow-300">
-            ¥ {sku.price}
-          </span>
+        <div className="flex flex-1 flex-col gap-3 sm:gap-6">
+          <div className="flex flex-shrink-0 flex-wrap items-baseline gap-x-6 gap-y-1 border-b border-slate-200 pb-3 sm:gap-x-10 sm:pb-5 dark:border-slate-700">
+            <h1 className="text-[clamp(1.35rem,7vmin,5.5rem)] font-bold tracking-wide">
+              {sku.name}
+            </h1>
+            <span className="text-[clamp(1.35rem,7vmin,5.5rem)] font-semibold text-amber-600 dark:text-yellow-300">
+              ¥ {sku.price}
+            </span>
+          </div>
+
+          {sku.material && (
+            <Section title="材质">
+              <p className="text-[clamp(0.95rem,3.2vmin,2.75rem)] leading-snug text-slate-700 dark:text-slate-100">
+                {sku.material}
+              </p>
+            </Section>
+          )}
+
+          {sku.sellingPoints.length > 0 && (
+            <Section title="卖点" className="min-h-0 flex-1 overflow-hidden">
+              <ul className="space-y-1 sm:space-y-2">
+                {sku.sellingPoints.map((pt, i) => (
+                  <li
+                    key={i}
+                    className="text-[clamp(0.95rem,3.2vmin,2.75rem)] leading-snug text-slate-700 dark:text-slate-100"
+                  >
+                    <span className="text-emerald-600 dark:text-emerald-400">
+                      •
+                    </span>{" "}
+                    {pt}
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
+
+          {sku.bannedWords.length > 0 && (
+            <Section title="⚠ 禁说">
+              <p className="text-[clamp(1.05rem,3.6vmin,3.25rem)] font-bold leading-snug text-red-600 dark:text-red-400">
+                {sku.bannedWords.join("   /   ")}
+              </p>
+            </Section>
+          )}
         </div>
 
-        {sku.material && (
-          <Section title="材质">
-            <p className="text-[clamp(0.95rem,3.2vmin,2.75rem)] leading-snug text-slate-700 dark:text-slate-100">
-              {sku.material}
-            </p>
-          </Section>
-        )}
-
-        {sku.sellingPoints.length > 0 && (
-          <Section title="卖点" className="min-h-0 flex-1 overflow-hidden">
-            <ul className="space-y-1 sm:space-y-2">
-              {sku.sellingPoints.map((pt, i) => (
-                <li
-                  key={i}
-                  className="text-[clamp(0.95rem,3.2vmin,2.75rem)] leading-snug text-slate-700 dark:text-slate-100"
-                >
-                  <span className="text-emerald-600 dark:text-emerald-400">
-                    •
-                  </span>{" "}
-                  {pt}
-                </li>
-              ))}
-            </ul>
-          </Section>
-        )}
-
-        {sku.bannedWords.length > 0 && (
-          <Section title="⚠ 禁说">
-            <p className="text-[clamp(1.05rem,3.6vmin,3.25rem)] font-bold leading-snug text-red-600 dark:text-red-400">
-              {sku.bannedWords.join("   /   ")}
-            </p>
-          </Section>
+        {sku.imageUrl && (
+          <div className="flex flex-shrink-0 justify-center sm:w-[35vw] sm:max-w-md">
+            <img
+              src={sku.imageUrl}
+              alt={sku.name}
+              className="max-h-[30vh] rounded-xl border border-slate-200 object-contain shadow-lg sm:max-h-full dark:border-slate-700"
+            />
+          </div>
         )}
 
         {showScript && (
