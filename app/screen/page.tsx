@@ -147,6 +147,82 @@ function renderHighlightedMarkdown(
   return result;
 }
 
+/* ── HTML string versions for direct DOM manipulation in rAF ── */
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function wrapSegHtml(
+  type: SegType,
+  text: string,
+  colorClass: string,
+): string {
+  switch (type) {
+    case "bold":
+      return `<strong class="${colorClass}">${escapeHtml(text)}</strong>`;
+    case "italic":
+      return `<em class="${colorClass}">${escapeHtml(text)}</em>`;
+    case "code":
+      return `<code class="rounded bg-slate-200/80 px-1 py-0.5 text-xs dark:bg-slate-700/50 ${colorClass}">${escapeHtml(text)}</code>`;
+    case "strike":
+      return `<del class="${colorClass}">${escapeHtml(text)}</del>`;
+    default:
+      return `<span class="${colorClass}">${escapeHtml(text)}</span>`;
+  }
+}
+
+function parseMarkdownToHtml(text: string, colorClass: string): string {
+  const segments = parseSegments(text);
+  let html = "";
+  for (const seg of segments) {
+    html += wrapSegHtml(seg.type, seg.content, colorClass);
+  }
+  return html;
+}
+
+function renderHighlightedMarkdownToHtml(
+  text: string,
+  highlightProgress: number,
+  readClass: string,
+  unreadClass: string,
+): string {
+  const segments = parseSegments(text);
+  let html = "";
+  const highlightEnd = highlightProgress + 1; // exclusive
+
+  for (const seg of segments) {
+    if (seg.rawEnd <= highlightEnd) {
+      html += wrapSegHtml(seg.type, seg.content, readClass);
+    } else if (seg.rawStart >= highlightEnd) {
+      html += wrapSegHtml(seg.type, seg.content, unreadClass);
+    } else {
+      const offset = highlightEnd - seg.rawStart;
+      let readChars: number;
+      if (offset <= seg.markerLen) {
+        readChars = 0;
+      } else if (offset >= seg.rawEnd - seg.rawStart - seg.markerLen) {
+        readChars = seg.content.length;
+      } else {
+        readChars = offset - seg.markerLen;
+      }
+      readChars = Math.max(0, Math.min(readChars, seg.content.length));
+      const unreadChars = seg.content.length - readChars;
+      if (readChars > 0) {
+        html += wrapSegHtml(seg.type, seg.content.slice(0, readChars), readClass);
+      }
+      if (unreadChars > 0) {
+        html += wrapSegHtml(seg.type, seg.content.slice(readChars), unreadClass);
+      }
+    }
+  }
+  return html;
+}
+
 type FsDocument = Document & {
   webkitFullscreenElement?: Element | null;
   webkitExitFullscreen?: () => Promise<void> | void;
@@ -183,6 +259,7 @@ export default function ScreenPage() {
   const [scriptDraft, setScriptDraft] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [activeLine, setActiveLine] = useState(0);
+  const [activeElementIdx, setActiveElementIdx] = useState(0);
   const [lineInterval, setLineInterval] = useState(3000);
   const [autoPlay, setAutoPlay] = useState(false);
   const scriptRef = useRef(script);
@@ -215,6 +292,8 @@ export default function ScreenPage() {
   const lastFrameTimeRef = useRef(Date.now());
   const scrollOffsetRef = useRef(0);
   const contentHeightRef = useRef(0);
+  const lastClosestIdxRef = useRef(-1);
+  const lastHighlightIdxRef = useRef(-1);
 
   const index = Math.min(
     Math.max(0, lastIndex),
@@ -316,6 +395,8 @@ export default function ScreenPage() {
       scrollOffsetRef.current = currentOffset;
     }
     contentHeightRef.current = 0; // 重新测量
+    lastClosestIdxRef.current = -1;
+    lastHighlightIdxRef.current = -1;
 
     lastFrameTimeRef.current = Date.now();
     setIsPlaying(true);
@@ -341,6 +422,7 @@ export default function ScreenPage() {
     setScriptError(null);
     setIsEditingScript(false);
     setActiveLine(0);
+    setActiveElementIdx(0);
     stopPlay();
 
     try {
@@ -352,6 +434,7 @@ export default function ScreenPage() {
       }
       updateSku(sku.id, { script: full });
       setActiveLine(0);
+      setActiveElementIdx(0);
     } catch (err) {
       setScriptError(err instanceof Error ? err.message : "生成失败");
     } finally {
@@ -448,6 +531,7 @@ export default function ScreenPage() {
     setIsEditingScript(false);
     setScriptError(null);
     setActiveLine(0);
+    setActiveElementIdx(0);
     const currentSku = skus[index];
     const hasScript = !!currentSku?.script;
     setScript(currentSku?.script ?? "");
@@ -480,19 +564,20 @@ export default function ScreenPage() {
       const speed = BASE_HEIGHT / lineIntervalRef.current;
       scrollOffsetRef.current += delta * speed;
 
-      // 精确测量单份内容高度
+      // 精确测量单份内容高度（3份渲染，scrollHeight / 3）
       let contentHeight = contentHeightRef.current;
       if (contentHeight === 0) {
-        const lastEl = lineRefs.current[scriptLines.length - 1];
-        if (lastEl) {
-          contentHeight = lastEl.offsetTop + lastEl.clientHeight;
+        const inner = scrollContainerRef.current;
+        if (inner) {
+          contentHeight = Math.round(inner.scrollHeight / 3);
           contentHeightRef.current = contentHeight;
         }
       }
       if (contentHeight > 10 && scrollOffsetRef.current >= contentHeight) {
         scrollOffsetRef.current -= contentHeight;
       }
-      inner.style.transform = `translateY(${-scrollOffsetRef.current}px)`;
+      // 使用 translate3d 强制 GPU 层 + 整数像素避免亚像素渲染问题
+      inner.style.transform = `translate3d(0, ${-Math.round(scrollOffsetRef.current)}px, 0)`;
 
       // 2. Karaoke 高亮 — 与真实滚动位置严格同步
       const lines = scriptRef.current.split("\n").filter((l) => l.trim() !== "");
@@ -524,8 +609,19 @@ export default function ScreenPage() {
             0,
             Math.min(lineText.length, Math.floor(progress * lineText.length)),
           );
-          setActiveLine(actualIdx);
-          setHighlightProgress(highlightIdx);
+
+          // 同步 React state（高亮 + karaoke），但只在值变化时更新，减少重渲染
+          if (actualIdx !== activeLineRef.current) {
+            setActiveLine(actualIdx);
+          }
+          if (closestIdx !== lastClosestIdxRef.current) {
+            setActiveElementIdx(closestIdx);
+            lastClosestIdxRef.current = closestIdx;
+          }
+          if (highlightIdx !== lastHighlightIdxRef.current) {
+            setHighlightProgress(highlightIdx);
+            lastHighlightIdxRef.current = highlightIdx;
+          }
         }
       }
 
@@ -775,7 +871,7 @@ export default function ScreenPage() {
             {/* 阅读引导线 */}
             <div className="pointer-events-none absolute inset-x-0 top-1/2 z-20 h-px -translate-y-1/2 bg-slate-400/30 dark:bg-white/20" />
 
-            {/* 滚动列表 — 双份渲染 + transform 实现真正无缝循环 */}
+            {/* 滚动列表 — 3份渲染 + transform 实现真正无缝循环 */}
             <div
               ref={teleContainerRef}
               className="relative overflow-hidden"
@@ -784,80 +880,54 @@ export default function ScreenPage() {
               <div
                 ref={scrollContainerRef}
                 className="flex flex-col items-center"
-                style={{ willChange: "transform" }}
+                style={{
+                  willChange: "transform",
+                  backfaceVisibility: "hidden",
+                  transformStyle: "preserve-3d",
+                }}
               >
-                {/* 第一份 */}
-                {scriptLines.map((line, i) => {
-                  const isRead = i < activeLine;
-                  const isCurrent = i === activeLine;
-                  const lineClass = isPlaying
-                    ? isCurrent
-                      ? "text-base font-bold text-slate-900 dark:text-white sm:text-lg"
-                      : "text-sm text-slate-400/50 dark:text-slate-400/40 sm:text-base"
-                    : isCurrent
-                      ? "text-lg font-bold text-slate-900 dark:text-white sm:text-xl"
-                      : isRead
-                        ? "text-sm text-slate-400/40 dark:text-slate-400/30 sm:text-base"
-                        : "text-sm text-slate-500/60 dark:text-slate-400/50 sm:text-base";
-                  return (
-                    <div
-                      key={`a-${i}`}
-                      ref={(el) => {
-                        lineRefs.current[i] = el;
-                      }}
-                      className={`flex w-full shrink-0 items-center justify-center px-5 py-1.5 text-center ${lineClass}`}
-                    >
-                      {isCurrent && isPlaying ? (
-                        <span>
-                          {renderHighlightedMarkdown(
-                            line,
-                            highlightProgress,
-                            "text-blue-600 drop-shadow-[0_0_4px_rgba(37,99,235,0.4)] dark:text-blue-400 dark:drop-shadow-[0_0_5px_rgba(96,165,250,0.7)]",
-                            "text-slate-400/50 dark:text-slate-500/30",
-                          )}
-                        </span>
-                      ) : (
-                        <span>{parseMarkdown(line)}</span>
-                      )}
-                    </div>
-                  );
-                })}
-                {/* 第二份（无缝衔接，样式与第一份同步） */}
-                {scriptLines.map((line, i) => {
-                  const isRead = i < activeLine;
-                  const isCurrent = i === activeLine;
-                  const lineClass = isPlaying
-                    ? isCurrent
-                      ? "text-base font-bold text-slate-900 dark:text-white sm:text-lg"
-                      : "text-sm text-slate-400/50 dark:text-slate-400/40 sm:text-base"
-                    : isCurrent
-                      ? "text-lg font-bold text-slate-900 dark:text-white sm:text-xl"
-                      : isRead
-                        ? "text-sm text-slate-400/40 dark:text-slate-400/30 sm:text-base"
-                        : "text-sm text-slate-500/60 dark:text-slate-400/50 sm:text-base";
-                  return (
-                    <div
-                      key={`b-${i}`}
-                      ref={(el) => {
-                        lineRefs.current[scriptLines.length + i] = el;
-                      }}
-                      className={`flex w-full shrink-0 items-center justify-center px-5 py-1.5 text-center ${lineClass}`}
-                    >
-                      {isCurrent && isPlaying ? (
-                        <span>
-                          {renderHighlightedMarkdown(
-                            line,
-                            highlightProgress,
-                            "text-blue-600 drop-shadow-[0_0_4px_rgba(37,99,235,0.4)] dark:text-blue-400 dark:drop-shadow-[0_0_5px_rgba(96,165,250,0.7)]",
-                            "text-slate-400/50 dark:text-slate-500/30",
-                          )}
-                        </span>
-                      ) : (
-                        <span>{parseMarkdown(line)}</span>
-                      )}
-                    </div>
-                  );
-                })}
+                {/* 多份渲染确保视口始终被内容填满 */}
+                {Array.from({ length: 3 }).map((_, copyIndex) =>
+                  scriptLines.map((line, i) => {
+                    const elementIdx = copyIndex * scriptLines.length + i;
+                    const isRead = i < activeLine;
+                    const isCurrent = isPlaying
+                      ? elementIdx === activeElementIdx
+                      : i === activeLine;
+                    // 播放模式下统一 text-base 避免行高变化触发布局重排
+                    const lineClass = isPlaying
+                      ? isCurrent
+                        ? "text-base font-bold text-slate-900 dark:text-white"
+                        : "text-base text-slate-400/50 dark:text-slate-400/40"
+                      : isCurrent
+                        ? "text-lg font-bold text-slate-900 dark:text-white sm:text-xl"
+                        : isRead
+                          ? "text-sm text-slate-400/40 dark:text-slate-400/30 sm:text-base"
+                          : "text-sm text-slate-500/60 dark:text-slate-400/50 sm:text-base";
+                    return (
+                      <div
+                        key={`c${copyIndex}-${i}`}
+                        ref={(el) => {
+                          lineRefs.current[elementIdx] = el;
+                        }}
+                        className={`flex w-full shrink-0 items-center justify-center px-5 py-1.5 text-center ${lineClass}`}
+                      >
+                        {isCurrent && isPlaying ? (
+                          <span>
+                            {renderHighlightedMarkdown(
+                              line,
+                              highlightProgress,
+                              "text-blue-600 drop-shadow-[0_0_4px_rgba(37,99,235,0.4)] dark:text-blue-400 dark:drop-shadow-[0_0_5px_rgba(96,165,250,0.7)]",
+                              "text-slate-400/50 dark:text-slate-500/30",
+                            )}
+                          </span>
+                        ) : (
+                          <span>{parseMarkdown(line)}</span>
+                        )}
+                      </div>
+                    );
+                  }),
+                )}
               </div>
             </div>
           </div>
