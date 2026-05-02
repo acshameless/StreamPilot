@@ -1,7 +1,21 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  rectSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useHasHydrated, useSkuStore } from "@/lib/store";
 import {
   downloadJson,
@@ -21,19 +35,132 @@ const btnPrimary =
 const btnGhost =
   "rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100";
 
+const cardClass =
+  "group flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md";
+
+interface CardActions {
+  onEdit: () => void;
+  onDelete: () => void;
+}
+
+function SkuCardBody({
+  sku,
+  onEdit,
+  onDelete,
+}: { sku: SKU } & CardActions) {
+  return (
+    <>
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="truncate text-lg font-semibold text-slate-900">
+          {sku.name}
+        </h3>
+        <span className="shrink-0 text-base font-semibold text-blue-600">
+          ¥{sku.price}
+        </span>
+      </div>
+      <p className="text-sm text-slate-500">
+        <span className="font-medium text-emerald-600">
+          {sku.sellingPoints.length}
+        </span>{" "}
+        卖点 ·{" "}
+        <span className="font-medium text-rose-600">
+          {sku.bannedWords.length}
+        </span>{" "}
+        禁说
+      </p>
+      <div className="mt-auto flex justify-end gap-2 pt-2">
+        <button
+          onClick={onEdit}
+          className="rounded-md border border-slate-200 bg-white px-3 py-1 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+        >
+          编辑
+        </button>
+        <button
+          onClick={onDelete}
+          className="rounded-md border border-rose-200 bg-white px-3 py-1 text-sm font-medium text-rose-600 transition hover:bg-rose-50"
+        >
+          删除
+        </button>
+      </div>
+    </>
+  );
+}
+
+function SortableSkuCard({
+  sku,
+  onEdit,
+  onDelete,
+}: { sku: SKU } & CardActions) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: sku.id });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    zIndex: isDragging ? 10 : undefined,
+    cursor: isDragging ? "grabbing" : "grab",
+  };
+
+  return (
+    <article
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={cardClass}
+    >
+      <SkuCardBody sku={sku} onEdit={onEdit} onDelete={onDelete} />
+    </article>
+  );
+}
+
 export default function Home() {
   const skus = useSkuStore((s) => s.skus);
   const deleteSku = useSkuStore((s) => s.deleteSku);
   const replaceSkus = useSkuStore((s) => s.replaceSkus);
+  const reorderSkus = useSkuStore((s) => s.reorderSkus);
   const hasHydrated = useHasHydrated();
 
   const [dialogState, setDialogState] = useState<DialogState>(null);
+  const [query, setQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+  );
+
+  const trimmedQuery = query.trim().toLowerCase();
+  const visibleSkus = useMemo(() => {
+    if (!trimmedQuery) return skus;
+    return skus.filter((sku) => {
+      if (sku.name.toLowerCase().includes(trimmedQuery)) return true;
+      return sku.sellingPoints.some((pt) =>
+        pt.toLowerCase().includes(trimmedQuery),
+      );
+    });
+  }, [skus, trimmedQuery]);
+
+  const isFiltering = trimmedQuery.length > 0;
 
   const handleDelete = (sku: SKU) => {
     if (window.confirm(`确定删除「${sku.name}」?`)) {
       deleteSku(sku.id);
     }
+  };
+
+  const handleDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    reorderSkus(String(active.id), String(over.id));
   };
 
   const handleExport = () => {
@@ -173,47 +300,74 @@ export default function Home() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {skus.map((sku) => (
-              <article
-                key={sku.id}
-                className="group flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
-              >
-                <div className="flex items-baseline justify-between gap-2">
-                  <h3 className="truncate text-lg font-semibold text-slate-900">
-                    {sku.name}
-                  </h3>
-                  <span className="shrink-0 text-base font-semibold text-blue-600">
-                    ¥{sku.price}
-                  </span>
-                </div>
-                <p className="text-sm text-slate-500">
-                  <span className="font-medium text-emerald-600">
-                    {sku.sellingPoints.length}
-                  </span>{" "}
-                  卖点 ·{" "}
-                  <span className="font-medium text-rose-600">
-                    {sku.bannedWords.length}
-                  </span>{" "}
-                  禁说
+          <>
+            <div className="mb-5 flex items-center gap-3">
+              <div className="relative flex-1 sm:max-w-md">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                  🔍
+                </span>
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="搜索 SKU 名称或卖点..."
+                  className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder-slate-400 shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+              <span className="text-sm tabular-nums text-slate-500">
+                {trimmedQuery
+                  ? `${visibleSkus.length} / ${skus.length}`
+                  : `共 ${skus.length} 个`}
+              </span>
+            </div>
+            {visibleSkus.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-2 py-24 text-center">
+                <p className="text-lg font-medium text-slate-600">
+                  没有匹配「{query.trim()}」的 SKU
                 </p>
-                <div className="mt-auto flex justify-end gap-2 pt-2">
-                  <button
-                    onClick={() => setDialogState({ mode: "edit", sku })}
-                    className="rounded-md border border-slate-200 bg-white px-3 py-1 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                  >
-                    编辑
-                  </button>
-                  <button
-                    onClick={() => handleDelete(sku)}
-                    className="rounded-md border border-rose-200 bg-white px-3 py-1 text-sm font-medium text-rose-600 transition hover:bg-rose-50"
-                  >
-                    删除
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
+                <button
+                  onClick={() => setQuery("")}
+                  className="text-sm text-blue-600 hover:underline"
+                >
+                  清除搜索
+                </button>
+              </div>
+            ) : isFiltering ? (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {visibleSkus.map((sku) => (
+                  <article key={sku.id} className={cardClass}>
+                    <SkuCardBody
+                      sku={sku}
+                      onEdit={() => setDialogState({ mode: "edit", sku })}
+                      onDelete={() => handleDelete(sku)}
+                    />
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={skus.map((s) => s.id)}
+                  strategy={rectSortingStrategy}
+                >
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {skus.map((sku) => (
+                      <SortableSkuCard
+                        key={sku.id}
+                        sku={sku}
+                        onEdit={() => setDialogState({ mode: "edit", sku })}
+                        onDelete={() => handleDelete(sku)}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            )}
+          </>
         )}
       </div>
 

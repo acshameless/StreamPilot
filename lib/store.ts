@@ -14,6 +14,7 @@ interface Actions {
   deleteSku: (id: string) => void;
   setLastIndex: (i: number) => void;
   replaceSkus: (skus: SKU[]) => void;
+  reorderSkus: (activeId: string, overId: string) => void;
 }
 
 function newId(): string {
@@ -59,6 +60,17 @@ export const useSkuStore = create<State & Actions>()(
         }),
       setLastIndex: (i) => set({ lastIndex: i }),
       replaceSkus: (skus) => set({ skus, lastIndex: 0 }),
+      reorderSkus: (activeId, overId) =>
+        set((s) => {
+          if (activeId === overId) return {};
+          const oldIndex = s.skus.findIndex((sku) => sku.id === activeId);
+          const newIndex = s.skus.findIndex((sku) => sku.id === overId);
+          if (oldIndex === -1 || newIndex === -1) return {};
+          const next = [...s.skus];
+          const [moved] = next.splice(oldIndex, 1);
+          next.splice(newIndex, 0, moved);
+          return { skus: next };
+        }),
     }),
     {
       name: "zhibo:state:v1",
