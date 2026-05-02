@@ -6,6 +6,31 @@ import { useHasHydrated, useSkuStore } from "@/lib/store";
 import { buildScriptPrompt, streamLlm } from "@/lib/llm";
 import ThemeToggle from "@/components/ThemeToggle";
 
+function parseMarkdown(text: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  const regex = /(\*\*|__)(.+?)\1|(\*|_)(.+?)\3|`(.+?)`|~~(.+?)~~/g;
+  let last = 0;
+  let m;
+  while ((m = regex.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    if (m[1]) parts.push(<strong key={m.index}>{m[2]}</strong>);
+    else if (m[3]) parts.push(<em key={m.index}>{m[4]}</em>);
+    else if (m[5])
+      parts.push(
+        <code
+          key={m.index}
+          className="rounded bg-slate-700/50 px-1 py-0.5 text-xs"
+        >
+          {m[5]}
+        </code>,
+      );
+    else if (m[6]) parts.push(<del key={m.index}>{m[6]}</del>);
+    last = regex.lastIndex;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
 type FsDocument = Document & {
   webkitFullscreenElement?: Element | null;
   webkitExitFullscreen?: () => Promise<void> | void;
@@ -55,6 +80,7 @@ export default function ScreenPage() {
   const [telePos, setTelePos] = useState({ x: 0, y: 0 });
   const [teleSize, setTeleSize] = useState({ w: 288, h: 192 });
   const [showTeleprompter, setShowTeleprompter] = useState(true);
+  const [highlightProgress, setHighlightProgress] = useState(0);
   const teleDragRef = useRef<{
     type: "drag" | "resize";
     sx: number;
@@ -308,6 +334,29 @@ export default function ScreenPage() {
     };
   }, []);
 
+  // 逐字高亮
+  useEffect(() => {
+    if (!isPlaying) return;
+    const lines = scriptRef.current.split("\n").filter((l) => l.trim() !== "");
+    const currentLine = lines[activeLine];
+    if (!currentLine) return;
+    setHighlightProgress(0);
+    const duration = lineInterval;
+    const lineStartTime = Date.now();
+    let rafId: number;
+    const tick = () => {
+      const elapsed = Date.now() - lineStartTime;
+      const progress = Math.min(1, elapsed / duration);
+      const idx = Math.floor(progress * currentLine.length);
+      setHighlightProgress(idx);
+      if (progress < 1) {
+        rafId = requestAnimationFrame(tick);
+      }
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [isPlaying, activeLine, lineInterval]);
+
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     gestureRef.current = {
       x: e.clientX,
@@ -559,13 +608,32 @@ export default function ScreenPage() {
                     key={i}
                     className={`flex h-10 w-full shrink-0 items-center justify-center px-5 text-center ${
                       isCurrent
-                        ? "text-base font-bold text-blue-400 sm:text-lg"
+                        ? "text-base font-bold sm:text-lg"
                         : isRead
                           ? "text-sm text-slate-400/50 sm:text-base"
                           : "text-sm text-slate-300/30 sm:text-base"
                     }`}
                   >
-                    <span className="line-clamp-1">{line}</span>
+                    {isCurrent ? (
+                      <span className="line-clamp-1">
+                        {line.split("").map((char, ci) => (
+                          <span
+                            key={ci}
+                            className={
+                              ci <= highlightProgress
+                                ? "text-blue-400"
+                                : "text-slate-500/30"
+                            }
+                          >
+                            {char}
+                          </span>
+                        ))}
+                      </span>
+                    ) : (
+                      <span className="line-clamp-1">
+                        {parseMarkdown(line)}
+                      </span>
+                    )}
                   </div>
                 );
               })}
