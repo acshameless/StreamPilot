@@ -156,14 +156,11 @@ export default function ScreenPage() {
     setActiveLine((prev) => {
       const next = prev + 1;
       const lines = scriptRef.current.split("\n").filter((l) => l.trim() !== "");
-      if (next >= lines.length) {
-        setIsPlaying(false);
-        return prev;
-      }
+      const actualNext = next >= lines.length ? 0 : next;
       timerRef.current = setTimeout(() => {
         advanceLine();
       }, lineIntervalRef.current);
-      return next;
+      return actualNext;
     });
   }, []);
 
