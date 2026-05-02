@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useHasHydrated, useSkuStore } from "@/lib/store";
+import ThemeToggle from "@/components/ThemeToggle";
 
 type FsDocument = Document & {
   webkitFullscreenElement?: Element | null;
@@ -162,7 +163,7 @@ export default function ScreenPage() {
 
   if (!hasHydrated) {
     return (
-      <main className="flex h-dvh items-center justify-center bg-slate-900 text-slate-400">
+      <main className="flex h-dvh items-center justify-center bg-white text-slate-500 dark:bg-slate-900 dark:text-slate-400">
         加载中...
       </main>
     );
@@ -170,11 +171,11 @@ export default function ScreenPage() {
 
   if (skus.length === 0) {
     return (
-      <main className="flex h-dvh flex-col items-center justify-center gap-4 bg-slate-900 text-slate-100">
+      <main className="flex h-dvh flex-col items-center justify-center gap-4 bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100">
         <p className="text-2xl">请先在主页添加 SKU</p>
         <button
           onClick={() => router.push("/")}
-          className="rounded-lg border border-slate-700 px-6 py-3 text-lg transition hover:bg-slate-800"
+          className="rounded-lg border border-slate-300 px-6 py-3 text-lg transition hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
         >
           ← 返回主页
         </button>
@@ -185,26 +186,37 @@ export default function ScreenPage() {
   const sku = skus[index];
 
   return (
-    <main className="flex h-dvh w-screen flex-col bg-slate-900 text-slate-50 select-none">
+    <main
+      className="flex h-dvh w-screen flex-col bg-white text-slate-900 select-none dark:bg-slate-900 dark:text-slate-50"
+      style={{
+        paddingTop: "env(safe-area-inset-top)",
+        paddingBottom: "env(safe-area-inset-bottom)",
+        paddingLeft: "env(safe-area-inset-left)",
+        paddingRight: "env(safe-area-inset-right)",
+      }}
+    >
       <header className="flex flex-shrink-0 items-center justify-between px-4 py-2 sm:px-8 sm:py-4">
         <div className="flex items-center gap-3 sm:gap-4">
           <button
             onClick={() => router.push("/")}
-            className="text-2xl text-slate-400 transition hover:text-slate-100"
+            className="text-2xl text-slate-500 transition hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
             aria-label="返回主页"
           >
             ←
           </button>
-          <span className="text-base tabular-nums text-slate-400 sm:text-xl">
+          <span className="text-base tabular-nums text-slate-500 sm:text-xl dark:text-slate-400">
             {index + 1} / {skus.length}
           </span>
         </div>
-        <button
-          onClick={toggleFullscreen}
-          className="rounded-lg border border-slate-700 px-3 py-1 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white sm:text-base"
-        >
-          {isFullscreen ? "退出全屏" : "全屏"}
-        </button>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <button
+            onClick={toggleFullscreen}
+            className="rounded-lg border border-slate-300 px-3 py-1 text-sm text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 sm:text-base dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+          >
+            {isFullscreen ? "退出全屏" : "全屏"}
+          </button>
+        </div>
       </header>
 
       <div
@@ -214,18 +226,18 @@ export default function ScreenPage() {
         onPointerCancel={onPointerCancel}
         className="animate-screen-in flex flex-1 cursor-pointer touch-none flex-col gap-3 overflow-hidden px-5 pb-3 sm:gap-6 sm:px-12 sm:pb-6"
       >
-        <div className="flex flex-shrink-0 flex-wrap items-baseline gap-x-6 gap-y-1 border-b border-slate-700 pb-3 sm:gap-x-10 sm:pb-5">
-          <h1 className="text-[clamp(1.75rem,7vmin,5.5rem)] font-bold tracking-wide">
+        <div className="flex flex-shrink-0 flex-wrap items-baseline gap-x-6 gap-y-1 border-b border-slate-200 pb-3 sm:gap-x-10 sm:pb-5 dark:border-slate-700">
+          <h1 className="text-[clamp(1.35rem,7vmin,5.5rem)] font-bold tracking-wide">
             {sku.name}
           </h1>
-          <span className="text-[clamp(1.75rem,7vmin,5.5rem)] font-semibold text-yellow-300">
+          <span className="text-[clamp(1.35rem,7vmin,5.5rem)] font-semibold text-amber-600 dark:text-yellow-300">
             ¥ {sku.price}
           </span>
         </div>
 
         {sku.material && (
           <Section title="材质">
-            <p className="text-[clamp(1.05rem,3.2vmin,2.75rem)] leading-snug text-slate-100">
+            <p className="text-[clamp(0.95rem,3.2vmin,2.75rem)] leading-snug text-slate-700 dark:text-slate-100">
               {sku.material}
             </p>
           </Section>
@@ -237,9 +249,12 @@ export default function ScreenPage() {
               {sku.sellingPoints.map((pt, i) => (
                 <li
                   key={i}
-                  className="text-[clamp(1.05rem,3.2vmin,2.75rem)] leading-snug text-slate-100"
+                  className="text-[clamp(0.95rem,3.2vmin,2.75rem)] leading-snug text-slate-700 dark:text-slate-100"
                 >
-                  <span className="text-emerald-400">•</span> {pt}
+                  <span className="text-emerald-600 dark:text-emerald-400">
+                    •
+                  </span>{" "}
+                  {pt}
                 </li>
               ))}
             </ul>
@@ -248,14 +263,14 @@ export default function ScreenPage() {
 
         {sku.bannedWords.length > 0 && (
           <Section title="⚠ 禁说">
-            <p className="text-[clamp(1.15rem,3.6vmin,3.25rem)] font-bold leading-snug text-red-400">
+            <p className="text-[clamp(1.05rem,3.6vmin,3.25rem)] font-bold leading-snug text-red-600 dark:text-red-400">
               {sku.bannedWords.join("   /   ")}
             </p>
           </Section>
         )}
       </div>
 
-      <footer className="hidden flex-shrink-0 items-center justify-between px-8 py-3 text-sm text-slate-500 sm:flex">
+      <footer className="hidden flex-shrink-0 items-center justify-between px-8 py-3 text-sm text-slate-500 sm:flex dark:text-slate-400">
         <span>← ↑ 上一个</span>
         <span>空格 / 点击 / 滑动 切换 · ESC 退出 · F 全屏</span>
         <span>下一个 → ↓</span>
@@ -275,7 +290,7 @@ function Section({
 }) {
   return (
     <section className={`flex flex-col gap-1 sm:gap-2 ${className}`}>
-      <h3 className="text-[clamp(0.7rem,1.4vmin,1.25rem)] uppercase tracking-wider text-slate-400">
+      <h3 className="text-[clamp(0.7rem,1.4vmin,1.25rem)] uppercase tracking-wider text-slate-500 dark:text-slate-400">
         {title}
       </h3>
       {children}

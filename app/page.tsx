@@ -24,6 +24,7 @@ import {
 } from "@/lib/io";
 import type { SKU } from "@/types/sku";
 import SkuFormDialog from "@/components/SkuFormDialog";
+import ThemeToggle from "@/components/ThemeToggle";
 
 type DialogState =
   | { mode: "create" }
@@ -31,12 +32,14 @@ type DialogState =
   | null;
 
 const btnPrimary =
-  "rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 active:bg-blue-800";
+  "shrink-0 snap-start rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 active:bg-blue-800";
 const btnGhost =
-  "rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100";
+  "shrink-0 snap-start rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700";
+const btnDark =
+  "shrink-0 snap-start rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white";
 
 const cardClass =
-  "group flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md";
+  "group flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-500/60";
 
 interface CardActions {
   onEdit: () => void;
@@ -45,39 +48,47 @@ interface CardActions {
 
 function SkuCardBody({
   sku,
+  index,
   onEdit,
   onDelete,
-}: { sku: SKU } & CardActions) {
+}: { sku: SKU; index: number } & CardActions) {
   return (
     <>
       <div className="flex items-baseline justify-between gap-2">
-        <h3 className="truncate text-lg font-semibold text-slate-900">
-          {sku.name}
-        </h3>
-        <span className="shrink-0 text-base font-semibold text-blue-600">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <span className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+            #{index + 1}
+          </span>
+          <h3 className="truncate text-lg font-semibold text-slate-900 dark:text-slate-100">
+            {sku.name}
+          </h3>
+        </div>
+        <span className="shrink-0 text-base font-semibold text-blue-600 dark:text-blue-400">
           ¥{sku.price}
         </span>
       </div>
-      <p className="text-sm text-slate-500">
-        <span className="font-medium text-emerald-600">
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        <span className="font-medium text-emerald-600 dark:text-emerald-400">
           {sku.sellingPoints.length}
         </span>{" "}
         卖点 ·{" "}
-        <span className="font-medium text-rose-600">
+        <span className="font-medium text-rose-600 dark:text-rose-400">
           {sku.bannedWords.length}
         </span>{" "}
         禁说
       </p>
       <div className="mt-auto flex justify-end gap-2 pt-2">
         <button
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={onEdit}
-          className="rounded-md border border-slate-200 bg-white px-3 py-1 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+          className="rounded-md border border-slate-200 bg-white px-3 py-1 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
         >
           编辑
         </button>
         <button
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={onDelete}
-          className="rounded-md border border-rose-200 bg-white px-3 py-1 text-sm font-medium text-rose-600 transition hover:bg-rose-50"
+          className="rounded-md border border-rose-200 bg-white px-3 py-1 text-sm font-medium text-rose-600 transition hover:bg-rose-50 dark:border-rose-900/50 dark:bg-slate-800 dark:text-rose-400 dark:hover:bg-rose-900/30"
         >
           删除
         </button>
@@ -88,9 +99,10 @@ function SkuCardBody({
 
 function SortableSkuCard({
   sku,
+  index,
   onEdit,
   onDelete,
-}: { sku: SKU } & CardActions) {
+}: { sku: SKU; index: number } & CardActions) {
   const {
     attributes,
     listeners,
@@ -114,9 +126,14 @@ function SortableSkuCard({
       style={style}
       {...attributes}
       {...listeners}
-      className={cardClass}
+      className={`${cardClass} touch-none`}
     >
-      <SkuCardBody sku={sku} onEdit={onEdit} onDelete={onDelete} />
+      <SkuCardBody
+        sku={sku}
+        index={index}
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
     </article>
   );
 }
@@ -148,6 +165,12 @@ export default function Home() {
       );
     });
   }, [skus, trimmedQuery]);
+
+  const indexOf = useMemo(() => {
+    const m = new Map<string, number>();
+    skus.forEach((s, i) => m.set(s.id, i));
+    return m;
+  }, [skus]);
 
   const isFiltering = trimmedQuery.length > 0;
 
@@ -231,7 +254,7 @@ export default function Home() {
 
   if (!hasHydrated) {
     return (
-      <main className="flex flex-1 items-center justify-center text-slate-400">
+      <main className="flex flex-1 items-center justify-center text-slate-400 dark:text-slate-500">
         加载中...
       </main>
     );
@@ -239,14 +262,17 @@ export default function Home() {
 
   return (
     <main className="flex flex-1 flex-col">
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-4 shadow-sm">
-        <div className="flex items-center gap-2">
-          <span className="inline-block h-6 w-1.5 rounded-full bg-blue-600" />
-          <h1 className="text-xl font-semibold tracking-tight text-slate-900">
-            直播提词助手
-          </h1>
+      <header className="flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-4 dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-center justify-between gap-2 sm:justify-start sm:gap-3">
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-6 w-1.5 rounded-full bg-blue-600" />
+            <h1 className="text-lg font-semibold tracking-tight text-slate-900 sm:text-xl dark:text-slate-100">
+              直播提词助手
+            </h1>
+          </div>
+          <ThemeToggle />
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 snap-x sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0 sm:snap-none">
           <button onClick={handlePickFile} className={btnGhost}>
             导入<span className="hidden sm:inline"> JSON</span>
           </button>
@@ -259,10 +285,7 @@ export default function Home() {
           >
             + 新增<span className="hidden sm:inline"> SKU</span>
           </button>
-          <Link
-            href="/screen"
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800"
-          >
+          <Link href="/screen" className={btnDark}>
             进入大屏 →
           </Link>
           <input
@@ -275,13 +298,13 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="flex-1 px-6 py-8">
+      <div className="flex-1 px-4 py-6 sm:px-6 sm:py-8">
         {skus.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-6 py-32 text-center">
-            <p className="text-2xl font-medium text-slate-700">
+            <p className="text-2xl font-medium text-slate-700 dark:text-slate-200">
               开始添加你的第一个 SKU
             </p>
-            <p className="max-w-sm text-sm text-slate-500">
+            <p className="max-w-sm text-sm text-slate-500 dark:text-slate-400">
               所有数据保存在你的浏览器里，不上传任何服务器
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3">
@@ -293,7 +316,7 @@ export default function Home() {
               </button>
               <button
                 onClick={handleLoadSamples}
-                className="rounded-lg border border-slate-300 bg-white px-6 py-3 text-base font-medium text-slate-700 transition hover:bg-slate-50"
+                className="rounded-lg border border-slate-300 bg-white px-6 py-3 text-base font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
               >
                 或加载 6 个示例
               </button>
@@ -301,7 +324,7 @@ export default function Home() {
           </div>
         ) : (
           <>
-            <div className="mb-5 flex items-center gap-3">
+            <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
               <div className="relative flex-1 sm:max-w-md">
                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
                   🔍
@@ -311,10 +334,10 @@ export default function Home() {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="搜索 SKU 名称或卖点..."
-                  className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder-slate-400 shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder-slate-400 shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:border-blue-400 dark:focus:ring-blue-500/20"
                 />
               </div>
-              <span className="text-sm tabular-nums text-slate-500">
+              <span className="text-sm tabular-nums text-slate-500 dark:text-slate-400">
                 {trimmedQuery
                   ? `${visibleSkus.length} / ${skus.length}`
                   : `共 ${skus.length} 个`}
@@ -322,12 +345,12 @@ export default function Home() {
             </div>
             {visibleSkus.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 py-24 text-center">
-                <p className="text-lg font-medium text-slate-600">
+                <p className="text-lg font-medium text-slate-600 dark:text-slate-300">
                   没有匹配「{query.trim()}」的 SKU
                 </p>
                 <button
                   onClick={() => setQuery("")}
-                  className="text-sm text-blue-600 hover:underline"
+                  className="text-sm text-blue-600 hover:underline dark:text-blue-400"
                 >
                   清除搜索
                 </button>
@@ -338,6 +361,7 @@ export default function Home() {
                   <article key={sku.id} className={cardClass}>
                     <SkuCardBody
                       sku={sku}
+                      index={indexOf.get(sku.id) ?? 0}
                       onEdit={() => setDialogState({ mode: "edit", sku })}
                       onDelete={() => handleDelete(sku)}
                     />
@@ -355,10 +379,11 @@ export default function Home() {
                   strategy={rectSortingStrategy}
                 >
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {skus.map((sku) => (
+                    {skus.map((sku, i) => (
                       <SortableSkuCard
                         key={sku.id}
                         sku={sku}
+                        index={i}
                         onEdit={() => setDialogState({ mode: "edit", sku })}
                         onDelete={() => handleDelete(sku)}
                       />

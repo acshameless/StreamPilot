@@ -12,7 +12,7 @@ interface Props {
 }
 
 const inputClass =
-  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100";
+  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:border-blue-400 dark:focus:ring-blue-500/20";
 
 export default function SkuFormDialog({ mode, sku, onClose }: Props) {
   const addSku = useSkuStore((s) => s.addSku);
@@ -52,21 +52,21 @@ export default function SkuFormDialog({ mode, sku, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm dark:bg-black/70"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-900 dark:shadow-black/40">
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             {mode === "create" ? "新增 SKU" : "编辑 SKU"}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="关闭"
-            className="rounded-md p-1 text-xl leading-none text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-md p-1 text-xl leading-none text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
           >
             ✕
           </button>
@@ -129,7 +129,7 @@ export default function SkuFormDialog({ mode, sku, onClose }: Props) {
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 font-medium text-slate-700 transition hover:bg-slate-50"
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
             >
               取消
             </button>
@@ -159,11 +159,13 @@ function Field({
 }) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="flex items-baseline gap-2 font-medium text-slate-700">
+      <span className="flex items-baseline gap-2 font-medium text-slate-700 dark:text-slate-200">
         {label}
-        {required && <span className="text-rose-600">*</span>}
+        {required && <span className="text-rose-600 dark:text-rose-400">*</span>}
         {hint && (
-          <span className="text-xs font-normal text-slate-400">{hint}</span>
+          <span className="text-xs font-normal text-slate-400 dark:text-slate-500">
+            {hint}
+          </span>
         )}
       </span>
       {children}

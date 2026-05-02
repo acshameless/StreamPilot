@@ -2,10 +2,14 @@ import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { SKU, SkuInput } from "@/types/sku";
+import { STORAGE_KEY, type ThemePref } from "./theme";
+
+export type { ThemePref } from "./theme";
 
 interface State {
   skus: SKU[];
   lastIndex: number;
+  theme: ThemePref;
 }
 
 interface Actions {
@@ -15,6 +19,7 @@ interface Actions {
   setLastIndex: (i: number) => void;
   replaceSkus: (skus: SKU[]) => void;
   reorderSkus: (activeId: string, overId: string) => void;
+  setTheme: (theme: ThemePref) => void;
 }
 
 function newId(): string {
@@ -29,6 +34,7 @@ export const useSkuStore = create<State & Actions>()(
     (set) => ({
       skus: [],
       lastIndex: 0,
+      theme: "system" as ThemePref,
       addSku: (input) => {
         const id = newId();
         set((s) => ({
@@ -71,11 +77,16 @@ export const useSkuStore = create<State & Actions>()(
           next.splice(newIndex, 0, moved);
           return { skus: next };
         }),
+      setTheme: (theme) => set({ theme }),
     }),
     {
-      name: "zhibo:state:v1",
+      name: STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
-      partialize: (s) => ({ skus: s.skus, lastIndex: s.lastIndex }),
+      partialize: (s) => ({
+        skus: s.skus,
+        lastIndex: s.lastIndex,
+        theme: s.theme,
+      }),
     },
   ),
 );
