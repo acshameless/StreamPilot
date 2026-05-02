@@ -70,10 +70,15 @@ export default function ScreenPage() {
   useEffect(() => {
     if (!hasHydrated || skus.length === 0) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "ArrowRight" || e.key === " " || e.key === "Spacebar") {
+      if (
+        e.key === "ArrowRight" ||
+        e.key === "ArrowDown" ||
+        e.key === " " ||
+        e.key === "Spacebar"
+      ) {
         e.preventDefault();
         goNext();
-      } else if (e.key === "ArrowLeft") {
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
         e.preventDefault();
         goPrev();
       } else if (e.key === "Escape") {
@@ -129,6 +134,17 @@ export default function ScreenPage() {
       dt < 700
     ) {
       if (dx < 0) goNext();
+      else goPrev();
+      return;
+    }
+
+    // Vertical swipe: swipe up = next, swipe down = prev.
+    if (
+      Math.abs(dy) > 50 &&
+      Math.abs(dy) > Math.abs(dx) * 1.4 &&
+      dt < 700
+    ) {
+      if (dy < 0) goNext();
       else goPrev();
       return;
     }
@@ -240,9 +256,9 @@ export default function ScreenPage() {
       </div>
 
       <footer className="hidden flex-shrink-0 items-center justify-between px-8 py-3 text-sm text-slate-500 sm:flex">
-        <span>← 上一个</span>
+        <span>← ↑ 上一个</span>
         <span>空格 / 点击 / 滑动 切换 · ESC 退出 · F 全屏</span>
-        <span>下一个 →</span>
+        <span>下一个 → ↓</span>
       </footer>
     </main>
   );
